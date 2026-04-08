@@ -5,6 +5,7 @@ import hotel.dao.IAuthService;
 import hotel.exception.AuthException;
 import hotel.exception.UserNotFoundException;
 import hotel.model.User;
+import hotel.util.ValidationUtils;
 import javafx.animation.FadeTransition;
 import javafx.animation.PauseTransition;
 import javafx.animation.TranslateTransition;
@@ -200,11 +201,23 @@ public class LoginController {
         String phone = signupPhoneField.getText().trim();
         String pass = signupPassField.getText();
 
-        if (name.isEmpty() || user.isEmpty() || mail.isEmpty() || pass.isEmpty()) {
-            showSignUpStatus("Please fill all required fields.", false);
+        if (!ValidationUtils.isValidName(name)) {
+            showSignUpStatus("Name must be 2-50 letters only.", false);
             return;
         }
-        if (pass.length() < 6) {
+        if (!ValidationUtils.isValidUsername(user)) {
+            showSignUpStatus("Invalid username format.", false);
+            return;
+        }
+        if (!ValidationUtils.isValidEmail(mail)) {
+            showSignUpStatus("Invalid email format.", false);
+            return;
+        }
+        if (!phone.isEmpty() && !ValidationUtils.isValidPhone(phone)) {
+            showSignUpStatus("Phone must be 10 digits.", false);
+            return;
+        }
+        if (!ValidationUtils.isValidPassword(pass)) {
             showSignUpStatus("Password must be at least 6 chars.", false);
             return;
         }

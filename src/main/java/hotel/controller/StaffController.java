@@ -2,6 +2,7 @@ package hotel.controller;
 
 import hotel.dao.IAuthService;
 import hotel.model.User;
+import hotel.util.ValidationUtils;
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -194,15 +195,19 @@ public class StaffController {
             setStatus("Fill all required fields.", false); return;
         }
 
-        if (!email.isEmpty() && !email.matches("^[A-Za-z0-9+_.-]+@(.+)$")) {
-            setStatus("Invalid email format.", false);
+        if (!ValidationUtils.isValidUsername(username)) {
+            setStatus("Username must be 3-20 chars (alphanumeric, dots, underscores).", false);
             return;
         }
-        if (!phone.isEmpty() && !phone.matches("\\d{10}")) {
-            setStatus("Phone must be 10 digits.", false);
+        if (!ValidationUtils.isValidEmail(email)) {
+            setStatus("Invalid email format (e.g. user@domain.com).", false);
             return;
         }
-        if (pass.length() < 6) {
+        if (!ValidationUtils.isValidPhone(phone)) {
+            setStatus("Phone must be exactly 10 digits.", false);
+            return;
+        }
+        if (!ValidationUtils.isValidPassword(pass)) {
             setStatus("Password must be at least 6 characters.", false);
             return;
         }

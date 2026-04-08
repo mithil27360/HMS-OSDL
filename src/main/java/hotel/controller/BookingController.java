@@ -1,10 +1,14 @@
 package hotel.controller;
 
+import hotel.dao.AuthService;
 import hotel.dao.IHotelService;
+import hotel.dao.IAuthService;
 import hotel.exception.RoomAlreadyBookedException;
 import hotel.model.Bill;
 import hotel.model.Room;
 import hotel.model.Booking;
+import hotel.model.User;
+import hotel.util.ValidationUtils;
 import javafx.util.StringConverter;
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
@@ -20,6 +24,8 @@ import java.util.stream.Collectors;
 public class BookingController {
 
     private final IHotelService hotelService; 
+    private final IAuthService authService;
+    private final User currentUser;
 
     private VBox view;
 
@@ -37,6 +43,8 @@ public class BookingController {
 
     public BookingController(IHotelService hotelService, MainController mainController) {
         this.hotelService = hotelService;
+        this.authService = AuthService.getInstance();
+        this.currentUser = authService.getCurrentUser();
         buildView();
     }
 
@@ -56,12 +64,19 @@ public class BookingController {
         bookPanel.setMinWidth(320);
         bookPanel.setMaxWidth(320);
 
-        VBox checkoutPanel = buildCheckoutPanel();
-        HBox.setHgrow(checkoutPanel, Priority.ALWAYS);
+        if (currentUser != null && (currentUser.isAdmin() || currentUser.isReceptionist())) {
+            VBox checkoutPanel = buildCheckoutPanel();
+            HBox.setHgrow(checkoutPanel, Priority.ALWAYS);
+            formsRow.getChildren().addAll(bookPanel, checkoutPanel);
+        } else {
+            // Guest mode: Give more space to the booking form or just show it alone
+            HBox.setHgrow(bookPanel, Priority.ALWAYS);
+            bookPanel.setMaxWidth(Double.MAX_VALUE);
+            formsRow.getChildren().add(bookPanel);
+        }
 
-        formsRow.getChildren().addAll(bookPanel, checkoutPanel);
-
-        Label tableTitle = new Label("Active Bookings");
+        String tableHeadline = (currentUser != null && currentUser.isGuest()) ? "My Reservations" : "Active Bookings";
+        Label tableTitle = new Label(tableHeadline);
         tableTitle.setStyle("-fx-text-fill: #2c3e50; -fx-font-size: 16px; -fx-font-weight: bold;");
         
         bookingTable = buildBookingTable();
@@ -253,6 +268,12 @@ public class BookingController {
         cancelItem.setOnAction(e -> {
             Booking selected = table.getSelectionModel().getSelectedItem();
             if (selected != null) {
+                // Ensure guests only cancel their OWN bookings
+                if (currentUser.isGuest() && !selected.getGuestName().equalsIgnoreCase(currentUser.getFullName())) {
+                    setBookStatus("You can only cancel your own bookings.", false);
+                    return;
+                }
+
                 Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
                 confirm.setTitle("Cancel Booking");
                 confirm.setHeaderText("Cancel reservation for Room " + selected.getRoomNumber() + "?");
@@ -286,8 +307,8 @@ public class BookingController {
             return;
         }
 
-        // Step 3: Check name matches ^[a-zA-Z ]{2,50}$
-        if (!name.matches("^[a-zA-Z ]{2,50}$")) {
+        // Step 3: Validate name via Utility
+        if (!ValidationUtils.isValidName(name)) {
             setBookStatus("Name must be 2-50 letters only", false);
             return;
         }
@@ -299,8 +320,8 @@ public class BookingController {
             return;
         }
 
-        // Step 5: Check contact matches ^\d{10}$
-        if (!contact.matches("^\\d{10}$")) {
+        // Step 5: Validate contact via Utility
+        if (!ValidationUtils.isValidPhone(contact)) {
             setBookStatus("Contact must be exactly 10 digits", false);
             return;
         }
@@ -464,14 +485,24 @@ public class BookingController {
                 .collect(Collectors.toList());
         roomCombo.setItems(FXCollections.observableArrayList(avail));
         
-        java.util.List<Integer> bookedToday = hotelService.getBookedRooms(LocalDate.now()).stream()
-                .map(Room::getRoomNumber)
-                .sorted()
-                .collect(Collectors.toList());
-        checkoutRoomCombo.setItems(FXCollections.observableArrayList(bookedToday));
+        if (currentUser != null && (currentUser.isAdmin() || currentUser.isReceptionist())) {
+            java.util.List<Integer> bookedToday = hotelService.getBookedRooms(LocalDate.now()).stream()
+                    .map(Room::getRoomNumber)
+                    .sorted()
+                    .collect(Collectors.toList());
+            checkoutRoomCombo.setItems(FXCollections.observableArrayList(bookedToday));
+        }
 
         java.util.List<Booking> active = hotelService.getAllBookings().stream()
                 .filter(b -> !b.isCheckedOut())
+                .filter(b -> {
+                    if (currentUser == null) return false;
+                    if (currentUser.isGuest()) {
+                        // Guest only sees their own
+                        return b.getGuestName().equalsIgnoreCase(currentUser.getFullName());
+                    }
+                    return true; // Staff see all
+                })
                 .collect(Collectors.toList());
         bookingTable.setItems(FXCollections.observableArrayList(active));
         
