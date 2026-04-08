@@ -156,6 +156,43 @@ public class HotelService implements IHotelService {
         }
     }
 
+    @Override
+    public void checkInRoom(int roomNumber) {
+        Room room = roomMap.get(roomNumber);
+        if (room == null) return;
+
+        synchronized (bookings) {
+            java.time.LocalDate today = java.time.LocalDate.now();
+            // Find a booking for this room that starts today and isn't checked in yet
+            Booking booking = bookings.stream()
+                .filter(b -> b.getRoomNumber() == roomNumber && !b.isCheckedIn() && !b.isCheckedOut())
+                .filter(b -> (today.isEqual(b.getCheckIn()) || today.isAfter(b.getCheckIn())))
+                .findFirst()
+                .orElse(null);
+
+            if (booking == null) {
+                throw new IllegalStateException("No active reservation found for Room " + roomNumber + " starting today.");
+            }
+
+            // Generate Bill at Check-in
+            Bill bill = new Bill(billCounter.getAndIncrement(), room, booking);
+
+            try {
+                booking.setCheckedIn(true);
+                bills.add(bill);
+                FileStorage.saveBill(bill);
+                FileStorage.saveBookings(bookings);
+                FileStorage.writeLog("Room " + roomNumber + " CHECKED IN. Bill Generated: #" + bill.getBillId() + " (Pay at Check-In)");
+            } catch (Exception e) {
+                booking.setCheckedIn(false);
+                bills.remove(bill);
+                billCounter.decrementAndGet();
+                FileStorage.writeLog("Check-in rollback for room " + roomNumber + ": " + e.getMessage());
+                throw new RuntimeException("Check-in failed.", e);
+            }
+        }
+    }
+
 
     private void startBackgroundServices(int roomNumber) {
         cleaningRooms.add(roomNumber);
@@ -179,26 +216,25 @@ public class HotelService implements IHotelService {
             java.time.LocalDate today = java.time.LocalDate.now();
             Booking activeBooking = bookings.stream()
                 .filter(b -> b.getRoomNumber() == roomNumber && !b.isCheckedOut())
-                .filter(b -> (today.isEqual(b.getCheckIn()) || today.isAfter(b.getCheckIn())))
+                .filter(b -> b.isCheckedIn()) // Can only checkout if they checked in
                 .findFirst()
                 .orElse(null);
 
             if (activeBooking == null) return null;
 
-            Bill bill = new Bill(billCounter.getAndIncrement(), room, activeBooking);
-
             try {
                 activeBooking.setCheckedOut(true);
-                bills.add(bill);
-                FileStorage.saveBill(bill);
                 FileStorage.saveBookings(bookings);
-                FileStorage.writeLog("Room " + roomNumber + " checked out. Bill: " + bill.getBillId());
+                FileStorage.writeLog("Room " + roomNumber + " CHECKED OUT. Releasing for cleaning.");
                 startBackgroundServices(roomNumber);
-                return bill;
+                
+                // Return the existing bill for this booking if available
+                return bills.stream()
+                    .filter(bill -> bill.getRoomNumber() == roomNumber && bill.getGuestName().equals(activeBooking.getGuestName()))
+                    .findFirst()
+                    .orElse(null);
             } catch (Exception e) {
                 activeBooking.setCheckedOut(false);
-                bills.remove(bill);
-                billCounter.decrementAndGet();
                 FileStorage.writeLog("Checkout rollback for room " + roomNumber + ": " + e.getMessage());
                 return null;
             }

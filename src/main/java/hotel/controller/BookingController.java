@@ -258,7 +258,27 @@ public class BookingController {
         });
         colTotal.setPrefWidth(100);
 
-        table.getColumns().addAll(colNum, colType, colGuest, colContact, colDates, colTotal);
+        TableColumn<Booking, String> colStatus = new TableColumn<>("Status");
+        colStatus.setCellValueFactory(d -> {
+            Booking b = d.getValue();
+            if (b.isCheckedOut()) return new SimpleStringProperty("Checked Out");
+            if (b.isCheckedIn()) return new SimpleStringProperty("Checked In");
+            return new SimpleStringProperty("Reserved");
+        });
+        colStatus.setPrefWidth(100);
+        colStatus.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) { setText(null); setStyle(""); return; }
+                setText(item);
+                if (item.equals("Checked In")) setStyle("-fx-text-fill: #2ecc71; -fx-font-weight: bold;");
+                else if (item.equals("Reserved")) setStyle("-fx-text-fill: #f39c12; -fx-font-weight: bold;");
+                else setStyle("-fx-text-fill: #95a5a6;");
+            }
+        });
+
+        table.getColumns().addAll(colNum, colType, colGuest, colContact, colDates, colTotal, colStatus);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
 
         // Cancellation Context Menu
@@ -274,6 +294,11 @@ public class BookingController {
                     return;
                 }
 
+                if (selected.isCheckedIn()) {
+                    setBookStatus("Cannot cancel a booking that has already checked in.", false);
+                    return;
+                }
+
                 Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
                 confirm.setTitle("Cancel Booking");
                 confirm.setHeaderText("Cancel reservation for Room " + selected.getRoomNumber() + "?");
@@ -286,7 +311,35 @@ public class BookingController {
                 }
             }
         });
-        menu.getItems().add(cancelItem);
+
+        MenuItem checkInItem = new MenuItem("Check-In Guest");
+        checkInItem.setStyle("-fx-text-fill: #2ecc71; -fx-font-weight: bold;");
+        checkInItem.setOnAction(e -> {
+            Booking selected = table.getSelectionModel().getSelectedItem();
+            if (selected != null) {
+                if (selected.isCheckedIn()) {
+                    setBookStatus("Guest is already checked in.", false);
+                    return;
+                }
+                try {
+                    hotelService.checkInRoom(selected.getRoomNumber());
+                    refresh();
+                    Alert success = new Alert(Alert.AlertType.INFORMATION);
+                    success.setTitle("Check-In Successful");
+                    success.setHeaderText("Guest Checked In & Bill Processed");
+                    success.setContentText("Room " + selected.getRoomNumber() + " is now active. Bill added to Revenue.");
+                    success.showAndWait();
+                } catch (Exception ex) {
+                    setBookStatus(ex.getMessage(), false);
+                }
+            }
+        });
+
+        if (currentUser.isAdmin() || currentUser.isReceptionist()) {
+            menu.getItems().addAll(checkInItem, cancelItem);
+        } else {
+            menu.getItems().add(cancelItem);
+        }
         table.setContextMenu(menu);
 
         return table;
@@ -420,30 +473,28 @@ public class BookingController {
     }
 
     private void handleCheckout() {
-        // Step 1: Check checkoutRoomCombo.getValue() != null
         Integer roomNum = checkoutRoomCombo.getValue();
         if (roomNum == null) {
             billOutput.setText("Select an occupied room to checkout");
             return;
         }
 
-        // Step 2: Get room = hotelService.getRoomByNumber(roomNum). Check room != null
         Room room = hotelService.getRoomByNumber(roomNum);
         if (room == null) {
             billOutput.setText("Selected room no longer exists");
             return;
         }
 
-        // Step 3: Call hotelService.checkoutRoom(roomNum)
+        // Checkout effectively releases the room and moves it to cleaning
         Bill bill = hotelService.checkoutRoom(roomNum);
-        if (bill == null) {
-            billOutput.setText("Checkout failed. Try again.");
-            return;
+        if (bill != null) {
+            billOutput.setText(bill.generateBillText());
+            setBookStatus("Checkout complete. Room " + roomNum + " released and scheduled for cleaning.", true);
+            refresh();
+        } else {
+            billOutput.setText("Checkout failed. Ensure room was checked in first.");
+            setBookStatus("Checkout failed or room not occupied.", false);
         }
-
-        // Step 4: Call refresh() after successful checkout
-        billOutput.setText(bill.generateBillText());
-        refresh();
     }
 
     private void updatePricePreview() {
