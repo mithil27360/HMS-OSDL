@@ -168,7 +168,7 @@ public class LogController {
                 miniStat("Total Capacity", totalRooms + " Units"),
                 miniStat("Occupancy Today", String.format("%.1f%%", occupancyRate)),
                 miniStat("Monthly Revenue", GenericUtils.formatRupees(monthlyRevenue)),
-                miniStat("Lifetime Revenue", GenericUtils.formatRupees(hotelService.getCollectedRevenue()))
+                miniStat("Lifetime Revenue", GenericUtils.formatRupees(hotelService.getTotalRevenue()))
             );
         }
 

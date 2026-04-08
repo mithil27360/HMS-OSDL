@@ -45,6 +45,8 @@ public interface IHotelService {
     double getCollectedRevenue();
     
     double getProjectedRevenue();
+
+    double getTotalRevenue();
     
     boolean deleteRoom(int roomNumber);
     

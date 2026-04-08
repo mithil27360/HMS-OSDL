@@ -48,8 +48,7 @@ public class DashboardController {
         topRow.getChildren().addAll(
             statCard("TOTAL ROOMS", totalRoomsLbl, "#3498db"),
             statCard("AVAILABLE NOW", availRoomsLbl, "#2ecc71"),
-            statCard("COLLECTED REVENUE", revenueLbl, "#f1c40f"),
-            statCard("PROJECTED REVENUE", projectedLbl, "#e67e22"),
+            statCard("TOTAL REVENUE", revenueLbl, "#f1c40f"),
             statCard("OCCUPANCY RATE", occupancyLbl, "#9b59b6")
         );
 
@@ -87,12 +86,7 @@ public class DashboardController {
         
         totalRoomsLbl.setText(String.valueOf(all.size()));
         availRoomsLbl.setText(String.valueOf(avail.size()));
-        revenueLbl.setText(GenericUtils.formatRupees(hotelService.getCollectedRevenue()));
-        
-        Label projLbl = (Label) view.getUserData();
-        if (projLbl != null) {
-            projLbl.setText(GenericUtils.formatRupees(hotelService.getProjectedRevenue()));
-        }
+        revenueLbl.setText(GenericUtils.formatRupees(hotelService.getTotalRevenue()));
         
         double rate = all.isEmpty() ? 0 : ((double)(all.size() - avail.size()) / all.size()) * 100;
         occupancyLbl.setText(String.format("%.1f%%", rate));

@@ -294,6 +294,11 @@ public class HotelService implements IHotelService {
     }
 
     @Override
+    public double getTotalRevenue() {
+        return getCollectedRevenue() + getProjectedRevenue();
+    }
+
+    @Override
     public boolean deleteRoom(int roomNumber) {
         Room room = roomMap.get(roomNumber);
         if (room == null) {

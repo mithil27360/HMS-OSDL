@@ -164,7 +164,7 @@ public class BillingController {
 
         // Calculate and show stats from the service
 
-        double total = hotelService.getCollectedRevenue();
+        double total = hotelService.getTotalRevenue();
         int count = bills.size();
         double avg = count > 0 ? total / count : 0.0;
 
