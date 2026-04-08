@@ -156,43 +156,6 @@ public class HotelService implements IHotelService {
         }
     }
 
-    @Override
-    public void checkInRoom(int roomNumber) {
-        Room room = roomMap.get(roomNumber);
-        if (room == null) return;
-
-        synchronized (bookings) {
-            java.time.LocalDate today = java.time.LocalDate.now();
-            // Find a booking for this room that starts today and isn't checked in yet
-            Booking booking = bookings.stream()
-                .filter(b -> b.getRoomNumber() == roomNumber && !b.isCheckedIn() && !b.isCheckedOut())
-                .filter(b -> (today.isEqual(b.getCheckIn()) || today.isAfter(b.getCheckIn())))
-                .findFirst()
-                .orElse(null);
-
-            if (booking == null) {
-                throw new IllegalStateException("No active reservation found for Room " + roomNumber + " starting today.");
-            }
-
-            // Generate Bill at Check-in
-            Bill bill = new Bill(billCounter.getAndIncrement(), room, booking);
-
-            try {
-                booking.setCheckedIn(true);
-                bills.add(bill);
-                FileStorage.saveBill(bill);
-                FileStorage.saveBookings(bookings);
-                FileStorage.writeLog("Room " + roomNumber + " CHECKED IN. Bill Generated: #" + bill.getBillId() + " (Pay at Check-In)");
-            } catch (Exception e) {
-                booking.setCheckedIn(false);
-                bills.remove(bill);
-                billCounter.decrementAndGet();
-                FileStorage.writeLog("Check-in rollback for room " + roomNumber + ": " + e.getMessage());
-                throw new RuntimeException("Check-in failed.", e);
-            }
-        }
-    }
-
 
     private void startBackgroundServices(int roomNumber) {
         cleaningRooms.add(roomNumber);
@@ -213,27 +176,29 @@ public class HotelService implements IHotelService {
         if (room == null) return null;
 
         synchronized (bookings) {
+            java.time.LocalDate today = java.time.LocalDate.now();
             Booking activeBooking = bookings.stream()
                 .filter(b -> b.getRoomNumber() == roomNumber && !b.isCheckedOut())
-                .filter(b -> b.isCheckedIn()) // Can only checkout if they checked in
+                .filter(b -> (today.isEqual(b.getCheckIn()) || today.isAfter(b.getCheckIn())))
                 .findFirst()
                 .orElse(null);
 
             if (activeBooking == null) return null;
 
+            Bill bill = new Bill(billCounter.getAndIncrement(), room, activeBooking);
+
             try {
                 activeBooking.setCheckedOut(true);
+                bills.add(bill);
+                FileStorage.saveBill(bill);
                 FileStorage.saveBookings(bookings);
-                FileStorage.writeLog("Room " + roomNumber + " CHECKED OUT. Releasing for cleaning.");
+                FileStorage.writeLog("Room " + roomNumber + " checked out. Bill: " + bill.getBillId());
                 startBackgroundServices(roomNumber);
-                
-                // Return the existing bill for this booking if available
-                return bills.stream()
-                    .filter(bill -> bill.getRoomNumber() == roomNumber && bill.getGuestName().equals(activeBooking.getGuestName()))
-                    .findFirst()
-                    .orElse(null);
+                return bill;
             } catch (Exception e) {
                 activeBooking.setCheckedOut(false);
+                bills.remove(bill);
+                billCounter.decrementAndGet();
                 FileStorage.writeLog("Checkout rollback for room " + roomNumber + ": " + e.getMessage());
                 return null;
             }
@@ -306,7 +271,7 @@ public class HotelService implements IHotelService {
     }
 
     @Override
-    public double getTotalRevenue() {
+    public double getCollectedRevenue() {
         return bills.stream()
                 .mapToDouble(Bill::getTotalAmount)
                 .sum();
@@ -316,21 +281,16 @@ public class HotelService implements IHotelService {
     public double getProjectedRevenue() {
         synchronized (bookings) {
             return bookings.stream()
-                .filter(b -> !b.isCheckedIn() && !b.isCheckedOut())
+                .filter(b -> !b.isCheckedOut())
                 .mapToDouble(b -> {
-                    Room r = roomMap.get(b.getRoomNumber());
+                    Room r = getRoomByNumber(b.getRoomNumber());
                     if (r == null) return 0.0;
-                    long nights = java.time.temporal.ChronoUnit.DAYS.between(b.getCheckIn(), b.getCheckOut());
-                    if (nights < 1) nights = 1;
-                    return r.getPricePerNight() * nights * 1.298; // Base * Days * Tax
+                    long days = java.time.temporal.ChronoUnit.DAYS.between(b.getCheckIn(), b.getCheckOut());
+                    if (days <= 0) days = 1;
+                    return r.getPricePerNight() * days * 1.298; // Sync with BookingController multiplier
                 })
                 .sum();
         }
-    }
-
-    @Override
-    public double getTotalPotentialRevenue() {
-        return getTotalRevenue() + getProjectedRevenue();
     }
 
     @Override

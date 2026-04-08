@@ -20,12 +20,6 @@ public interface IHotelService {
     boolean isRoomAvailableForDates(int roomNumber, java.time.LocalDate checkIn, java.time.LocalDate checkOut);
 
     Bill checkoutRoom(int roomNumber);
-    
-    /**
-     * Checks in a guest for an active booking.
-     * Generates the bill immediately.
-     */
-    void checkInRoom(int roomNumber);
 
     
     List<Room> getAllRooms();
@@ -48,17 +42,9 @@ public interface IHotelService {
     
     List<Room> getRoomsSortedByNumber();
     
-    double getTotalRevenue();
+    double getCollectedRevenue();
     
-    /**
-     * Calculates revenue from ALL reservations that are NOT checked in yet.
-     */
     double getProjectedRevenue();
-    
-    /**
-     * Total Actual + Projected revenue.
-     */
-    double getTotalPotentialRevenue();
     
     boolean deleteRoom(int roomNumber);
     

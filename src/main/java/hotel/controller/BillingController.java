@@ -17,9 +17,8 @@ public class BillingController {
     private TableView<Bill> billTable;
     private TextArea billDetail;
     private Label totalRevLabel;
-    private Label projectedLabel;
-    private Label totalPotentialLabel;
     private Label billCountLabel;
+    private Label avgBillLabel;
 
     public BillingController(IHotelService hotelService) {
         this.hotelService = hotelService;
@@ -57,15 +56,13 @@ public class BillingController {
         row.setAlignment(Pos.CENTER_LEFT);
 
         totalRevLabel = new Label("₹0");
-        projectedLabel = new Label("₹0");
-        totalPotentialLabel = new Label("₹0");
         billCountLabel = new Label("0");
+        avgBillLabel = new Label("₹0");
 
         row.getChildren().addAll(
-            revCard("Actual Revenue", totalRevLabel, "#2ecc71"),
-            revCard("Projected Earnings", projectedLabel, "#f39c12"),
-            revCard("Total Potential", totalPotentialLabel, "#3498db"),
-            revCard("Bills", billCountLabel, "#9b59b6")
+            revCard("Total Revenue", totalRevLabel, "#3498db"),
+            revCard("Bills Generated", billCountLabel, "#3498db"),
+            revCard("Average Bill", avgBillLabel, "#9b59b6")
         );
         return row;
     }
@@ -167,15 +164,13 @@ public class BillingController {
 
         // Calculate and show stats from the service
 
-        double actual = hotelService.getTotalRevenue();
-        double projected = hotelService.getProjectedRevenue();
-        double total = hotelService.getTotalPotentialRevenue();
+        double total = hotelService.getCollectedRevenue();
         int count = bills.size();
+        double avg = count > 0 ? total / count : 0.0;
 
-        totalRevLabel.setText("₹" + String.format("%.0f", actual));
-        projectedLabel.setText("₹" + String.format("%.0f", projected));
-        totalPotentialLabel.setText("₹" + String.format("%.0f", total));
+        totalRevLabel.setText("₹" + String.format("%.0f", total));
         billCountLabel.setText(String.valueOf(count));
+        avgBillLabel.setText("₹" + String.format("%.0f", avg));
     }
 
     public Node getView() { return view; }

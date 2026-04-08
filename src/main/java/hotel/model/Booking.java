@@ -16,7 +16,6 @@ public class Booking implements Serializable {
     private LocalDate checkIn;
     private LocalDate checkOut;
     private boolean isCheckedOut;
-    private boolean isCheckedIn;
 
     public Booking(int bookingId, int roomNumber, String guestName, String guestContact, 
                    LocalDate checkIn, LocalDate checkOut) {
@@ -27,7 +26,6 @@ public class Booking implements Serializable {
         this.checkIn = checkIn;
         this.checkOut = checkOut;
         this.isCheckedOut = false;
-        this.isCheckedIn = false;
     }
 
     public int getBookingId() { return bookingId; }
@@ -38,8 +36,6 @@ public class Booking implements Serializable {
     public LocalDate getCheckOut() { return checkOut; }
     public boolean isCheckedOut() { return isCheckedOut; }
     public void setCheckedOut(boolean checkedOut) { isCheckedOut = checkedOut; }
-    public boolean isCheckedIn() { return isCheckedIn; }
-    public void setCheckedIn(boolean checkedIn) { isCheckedIn = checkedIn; }
 
     public boolean overlaps(LocalDate start, LocalDate end) {
         if (isCheckedOut) return false;

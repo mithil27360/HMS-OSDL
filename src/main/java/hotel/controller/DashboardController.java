@@ -41,15 +41,20 @@ public class DashboardController {
 
         totalRoomsLbl = new Label("0");
         availRoomsLbl = new Label("0");
-        revenueLbl = new Label("₹0");
+        revenueLbl = new Label("₹0"); 
+        Label projectedLbl = new Label("₹0");
         occupancyLbl = new Label("0%");
 
         topRow.getChildren().addAll(
             statCard("TOTAL ROOMS", totalRoomsLbl, "#3498db"),
             statCard("AVAILABLE NOW", availRoomsLbl, "#2ecc71"),
-            statCard("EST. REVENUE", revenueLbl, "#f1c40f"),
+            statCard("COLLECTED REVENUE", revenueLbl, "#f1c40f"),
+            statCard("PROJECTED REVENUE", projectedLbl, "#e67e22"),
             statCard("OCCUPANCY RATE", occupancyLbl, "#9b59b6")
         );
+
+        // We need to keep a reference to projectedLbl to refresh it
+        view.setUserData(projectedLbl);
 
         view.getChildren().addAll(title, topRow);
         refresh();
@@ -82,7 +87,12 @@ public class DashboardController {
         
         totalRoomsLbl.setText(String.valueOf(all.size()));
         availRoomsLbl.setText(String.valueOf(avail.size()));
-        revenueLbl.setText(GenericUtils.formatRupees(hotelService.getTotalRevenue()));
+        revenueLbl.setText(GenericUtils.formatRupees(hotelService.getCollectedRevenue()));
+        
+        Label projLbl = (Label) view.getUserData();
+        if (projLbl != null) {
+            projLbl.setText(GenericUtils.formatRupees(hotelService.getProjectedRevenue()));
+        }
         
         double rate = all.isEmpty() ? 0 : ((double)(all.size() - avail.size()) / all.size()) * 100;
         occupancyLbl.setText(String.format("%.1f%%", rate));
