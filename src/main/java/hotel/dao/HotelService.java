@@ -57,7 +57,9 @@ public class HotelService implements IHotelService {
                 .orElse(0);
         bookingCounter = new AtomicInteger(maxBookingId + 1);
 
-        roomServiceExecutor = Executors.newFixedThreadPool(4);
+    // CRITICAL FIX: Use cached thread pool instead of fixed pool(4)
+    // Prevents room status delays when 5+ checkouts happen rapidly
+    roomServiceExecutor = Executors.newCachedThreadPool();
         
         // Resource cleanup: Shutdown executor on JVM exit
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -136,32 +138,41 @@ public class HotelService implements IHotelService {
         }
     }
 
-    @Override
-    public boolean isRoomAvailableForDates(int roomNumber, java.time.LocalDate checkIn, java.time.LocalDate checkOut) {
+    /**
+     * CRITICAL FIX: Private unsynchronized helper method.
+     * Caller MUST hold locks on both cleaningRooms and bookings before calling.
+     * Performs three checks without acquiring additional locks.
+     */
+    private boolean _isRoomAvailableForDatesUnsafe(int roomNumber, java.time.LocalDate checkIn, java.time.LocalDate checkOut) {
         // 1. Check Maintenance
         if (cleaningRooms.contains(roomNumber) && !checkIn.isAfter(java.time.LocalDate.now())) {
             return false;
         }
 
-        synchronized (bookings) {
-            // 2. Check Overlaps
-            boolean hasOverlap = bookings.stream()
-                .filter(b -> b.getRoomNumber() == roomNumber)
-                .anyMatch(b -> b.overlaps(checkIn, checkOut));
+        // 2. Check Overlaps
+        boolean hasOverlap = bookings.stream()
+            .filter(b -> b.getRoomNumber() == roomNumber)
+            .anyMatch(b -> b.overlaps(checkIn, checkOut));
+        
+        if (hasOverlap) return false;
+
+        // 3. Strict Check-in: If today is the requested check-in day,
+        // check if there is an outgoing guest who HAS NOT checked out yet.
+        if (checkIn.isEqual(java.time.LocalDate.now())) {
+            boolean hasUncheckedOutGuest = bookings.stream()
+                .filter(b -> b.getRoomNumber() == roomNumber && !b.isCheckedOut())
+                .anyMatch(b -> b.getCheckOut().isEqual(checkIn));
             
-            if (hasOverlap) return false;
+            if (hasUncheckedOutGuest) return false;
+        }
 
-            // 3. Strict Check-in: If today is the requested check-in day,
-            // check if there is an outgoing guest who HAS NOT checked out yet.
-            if (checkIn.isEqual(java.time.LocalDate.now())) {
-                boolean hasUncheckedOutGuest = bookings.stream()
-                    .filter(b -> b.getRoomNumber() == roomNumber && !b.isCheckedOut())
-                    .anyMatch(b -> b.getCheckOut().isEqual(checkIn));
-                
-                if (hasUncheckedOutGuest) return false;
-            }
+        return true;
+    }
 
-            return true;
+    @Override
+    public boolean isRoomAvailableForDates(int roomNumber, java.time.LocalDate checkIn, java.time.LocalDate checkOut) {
+        synchronized (bookings) {
+            return _isRoomAvailableForDatesUnsafe(roomNumber, checkIn, checkOut);
         }
     }
 
@@ -269,11 +280,9 @@ public class HotelService implements IHotelService {
 
     @Override
     public List<Room> getAvailableRooms(java.time.LocalDate start, java.time.LocalDate end) {
-        synchronized (rooms) {
-            return rooms.stream()
-                    .filter(r -> isRoomAvailableForDates(r.getRoomNumber(), start, end))
-                    .collect(Collectors.toList());
-        }
+        return rooms.stream()
+            .filter(r -> isRoomAvailableForDates(r.getRoomNumber(), start, end))
+            .collect(Collectors.toList());
     }
 
     @Override
@@ -383,7 +392,7 @@ public class HotelService implements IHotelService {
     public boolean cancelBooking(int bookingId) {
         synchronized (bookings) {
             Booking found = bookings.stream()
-                .filter(b -> b.getBookingId() == bookingId)
+                .filter(b -> b.getBookingId() == bookingId && !b.isCheckedOut())
                 .findFirst()
                 .orElse(null);
 

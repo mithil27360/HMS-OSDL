@@ -10,9 +10,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.*;
-import javafx.scene.paint.Color;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -30,6 +28,7 @@ public class MainController {
     private StackPane contentArea;
     private Map<String, Button> navButtons = new HashMap<>();
     private Map<String, Node> controllerCache = new HashMap<>();  // Cache controller views to preserve state
+    private Map<String, Runnable> refreshActions = new HashMap<>();
     private String activeNav = "";
 
     public MainController(Runnable onLogout) {
@@ -151,32 +150,38 @@ public class MainController {
                     DashboardController dashCtrl = new DashboardController(hotelService);
                     content = dashCtrl.getView();
                     controllerCache.put(target, content);
+                    refreshActions.put(target, dashCtrl::refresh);
                     break;
                 case "Bookings":
                 case "My Bookings":
                     BookingController bookCtrl = new BookingController(hotelService, this);
                     content = bookCtrl.getView();
                     controllerCache.put(target, content);
+                    refreshActions.put(target, bookCtrl::refresh);
                     break;
                 case "Rooms":
                     RoomController roomCtrl = new RoomController(hotelService);
                     content = roomCtrl.getView();
                     controllerCache.put(target, content);
+                    refreshActions.put(target, roomCtrl::refresh);
                     break;
                 case "Staff":
                     StaffController staffCtrl = new StaffController(authService);
                     content = staffCtrl.getView();
                     controllerCache.put(target, content);
+                    refreshActions.put(target, staffCtrl::refresh);
                     break;
                 case "Revenue":
                     BillingController billCtrl = new BillingController(hotelService);
                     content = billCtrl.getView();
                     controllerCache.put(target, content);
+                    refreshActions.put(target, billCtrl::refresh);
                     break;
                 case "System Logs":
                     LogController logCtrl = new LogController(hotelService);
                     content = logCtrl.getView();
                     controllerCache.put(target, content);
+                    refreshActions.put(target, logCtrl::refresh);
                     break;
                 default:
                     content = new Label("Coming soon...");
@@ -184,6 +189,10 @@ public class MainController {
         }
 
         contentArea.getChildren().setAll(content);
+        Runnable refreshAction = refreshActions.get(target);
+        if (refreshAction != null) {
+            refreshAction.run();
+        }
     }
 
     public BorderPane getRootLayout() { return rootLayout; }

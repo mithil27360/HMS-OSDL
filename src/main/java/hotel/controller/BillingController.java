@@ -4,6 +4,7 @@ import hotel.dao.IHotelService;
 import hotel.model.Bill;
 import hotel.model.Booking;
 import hotel.model.Room;
+import hotel.util.BillingUtils;
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -131,9 +132,17 @@ public class BillingController {
             @Override
             protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
-                if (item.equals("PAID") || item.equals("BOOKED")) {
+                if (empty || item == null) {
+                    setText(null);
+                    setStyle("");
+                    return;
+                }
+                if ("PAID".equals(item)) {
                     setText("PAID");
                     setStyle("-fx-text-fill: #ffffff; -fx-background-color: #2ecc71; -fx-background-radius: 4; -fx-alignment: center; -fx-font-weight: bold; -fx-padding: 2 5 2 5;");
+                } else {
+                    setText("BOOKED");
+                    setStyle("-fx-text-fill: #ffffff; -fx-background-color: #f39c12; -fx-background-radius: 4; -fx-alignment: center; -fx-font-weight: bold; -fx-padding: 2 5 2 5;");
                 }
             }
         });
@@ -179,7 +188,7 @@ public class BillingController {
                     Booking b = (Booking) orig;
                     billDetail.setText("TRANSACTION PREVIEW\n" +
                                      "--------------------\n" +
-                                     "Status: PAID [BOOKING]\n" +
+                                     "Status: BOOKED [PENDING]\n" +
                                      "Guest : " + b.getGuestName() + "\n" +
                                      "Room  : " + b.getRoomNumber() + "\n" +
                                      "Dates : " + b.getCheckIn() + " to " + b.getCheckOut() + "\n" +
@@ -236,7 +245,7 @@ public class BillingController {
                 Room r = hotelService.getRoomByNumber(b.getRoomNumber());
                 long nights = ChronoUnit.DAYS.between(b.getCheckIn(), b.getCheckOut());
                 if (nights <= 0) nights = 1;
-                double amount = (r != null ? r.getPricePerNight() : 0.0) * nights * 1.298;
+                double amount = (r != null ? r.getPricePerNight() : 0.0) * nights * BillingUtils.getTotalMultiplier();
 
                 combined.add(new RevenueRecord(
                     "RES-" + b.getBookingId(),
@@ -245,7 +254,7 @@ public class BillingController {
                     r != null ? r.getRoomType().getDisplayName() : "N/A",
                     amount,
                     b.getCheckIn().toString(),
-                    "PAID",
+                    "BOOKED",
                     b
                 ));
             }

@@ -7,7 +7,9 @@ import java.io.*;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -17,7 +19,18 @@ public class AuthService implements IAuthService {
 
     private final String USERS_FILE = FileStorage.getUsersFile();
     private List<User> users;
-    private User currentUser;
+    private volatile User currentUser;
+
+    private static final Set<String> USERS_ALLOWED_CLASSES = new HashSet<>(Set.of(
+        "java.util.ArrayList",
+        "java.lang.String",
+        "java.lang.Boolean",
+        "java.lang.Object",
+        "[Ljava.lang.Object;",
+        "hotel.model.Person",
+        "hotel.model.User",
+        "hotel.model.User$Role"
+    ));
 
     private AuthService() {
         users = new java.util.concurrent.CopyOnWriteArrayList<>(loadUsers());
@@ -58,7 +71,7 @@ public class AuthService implements IAuthService {
     }
 
     @Override
-    public User login(String username, String password) throws AuthException, UserNotFoundException {
+    public synchronized User login(String username, String password) throws AuthException, UserNotFoundException {
         String hashedInput = hashPassword(password);
         
         User user;
@@ -83,7 +96,7 @@ public class AuthService implements IAuthService {
     }
 
     @Override
-    public void logout() {
+    public synchronized void logout() {
         if (currentUser != null) {
             FileStorage.writeLog("Logout: " + currentUser.getFullName());
         }
@@ -91,7 +104,7 @@ public class AuthService implements IAuthService {
     }
 
     @Override
-    public User getCurrentUser() { return currentUser; }
+    public synchronized User getCurrentUser() { return currentUser; }
 
     @Override
     public boolean addUser(User user) {
@@ -145,13 +158,55 @@ public class AuthService implements IAuthService {
         }
     }
 
-    @SuppressWarnings("unchecked")
     private List<User> loadUsers() {
         File f = new File(USERS_FILE);
         if (!f.exists()) return new ArrayList<>();
-        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(USERS_FILE))) {
-            return (List<User>) ois.readObject();
-        } catch (IOException | ClassNotFoundException e) {
+        try (ObjectInputStream ois = new ObjectInputStream(new BufferedInputStream(new FileInputStream(USERS_FILE)))) {
+            ois.setObjectInputFilter(info -> {
+                if (info.depth() > 24 || info.references() > 20_000 || info.arrayLength() > 50_000) {
+                    return ObjectInputFilter.Status.REJECTED;
+                }
+
+                Class<?> clazz = info.serialClass();
+                if (clazz == null) {
+                    return ObjectInputFilter.Status.UNDECIDED;
+                }
+                if (clazz.isPrimitive()) {
+                    return ObjectInputFilter.Status.ALLOWED;
+                }
+                if (clazz.isArray()) {
+                    Class<?> component = clazz;
+                    while (component.isArray()) {
+                        component = component.getComponentType();
+                    }
+                    if (component.isPrimitive()) {
+                        return ObjectInputFilter.Status.ALLOWED;
+                    }
+                    return USERS_ALLOWED_CLASSES.contains(component.getName())
+                        ? ObjectInputFilter.Status.ALLOWED
+                        : ObjectInputFilter.Status.REJECTED;
+                }
+
+                return USERS_ALLOWED_CLASSES.contains(clazz.getName())
+                    ? ObjectInputFilter.Status.ALLOWED
+                    : ObjectInputFilter.Status.REJECTED;
+            });
+
+            Object data = ois.readObject();
+            if (!(data instanceof List<?> rawUsers)) {
+                return new ArrayList<>();
+            }
+
+            List<User> validated = new ArrayList<>(rawUsers.size());
+            for (Object item : rawUsers) {
+                if (!(item instanceof User)) {
+                    throw new InvalidObjectException("Unexpected user payload type");
+                }
+                validated.add((User) item);
+            }
+            return validated;
+        } catch (IOException | ClassNotFoundException | SecurityException e) {
+            FileStorage.writeLog("User load security/persistence error", e);
             return new ArrayList<>();
         }
     }

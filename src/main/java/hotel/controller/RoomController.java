@@ -220,17 +220,12 @@ public class RoomController {
     private void handleDeleteRoom() {
         Room selected = roomTable.getSelectionModel().getSelectedItem();
         if (selected == null) { setStatus("Select a room to remove.", false); return; }
-        
-        boolean isReserved = !hotelService.isRoomAvailableForDates(selected.getRoomNumber(), 
-            java.time.LocalDate.now(), java.time.LocalDate.now().plusDays(365));
-        
-        if (isReserved) {
-            setStatus("Cannot delete room with active reservations.", false); return;
-        }
 
         if (hotelService.deleteRoom(selected.getRoomNumber())) {
             setStatus("Room removed.", true);
             refresh();
+        } else {
+            setStatus("Cannot delete room with active reservations.", false);
         }
     }
 
@@ -246,6 +241,8 @@ public class RoomController {
         java.util.List<Room> rooms = hotelService.getAllRooms();
         rooms.sort(java.util.Comparator.comparingInt(Room::getRoomNumber));
         roomTable.setItems(FXCollections.observableArrayList(rooms));
+        // CRITICAL FIX: Refresh table to re-evaluate cell factories (status column)
+        roomTable.refresh();
     }
 
     public Node getView() { return view; }

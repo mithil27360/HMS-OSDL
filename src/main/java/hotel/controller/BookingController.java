@@ -167,7 +167,6 @@ public class BookingController {
         checkOutPicker.setMaxWidth(Double.MAX_VALUE);
         checkOutPicker.setOnAction(e -> {
             updatePricePreview();
-            refresh();
         });
 
         pricePreview = new Label("Select a room to see pricing");
@@ -215,9 +214,11 @@ public class BookingController {
                 if (booking == null) return "";
                 Room r = hotelService.getRoomByNumber(booking.getRoomNumber());
                 String roomInfo = r != null ? " - " + r.getRoomType().getDisplayName() : "";
-                return String.format("Room %d%s | %s (%s→%s)", 
+                LocalDate today = LocalDate.now();
+                String status = today.isBefore(booking.getCheckIn()) ? "UPCOMING" : "IN-HOUSE";
+                return String.format("Room %d%s | %s [%s] (%s→%s)", 
                     booking.getRoomNumber(), roomInfo, booking.getGuestName(),
-                    booking.getCheckIn(), booking.getCheckOut());
+                    status, booking.getCheckIn(), booking.getCheckOut());
             }
 
             @Override
@@ -331,6 +332,9 @@ public class BookingController {
     }
 
     private void handleBookRoom() {
+        // CRITICAL FIX: Clear status message at start of new booking attempt, not on every refresh
+        bookingStatus.setText("");
+        
         // Step 1: Check roomCombo.getValue() != null
         Integer roomNum = roomCombo.getValue();
         if (roomNum == null) {
@@ -452,8 +456,14 @@ public class BookingController {
     }
 
     private void clearFields() {
-        guestNameField.clear();
-        contactField.clear();
+        // Keep guest identity prefilled and read-only after successful booking.
+        if (currentUser != null && currentUser.isGuest()) {
+            guestNameField.setText(currentUser.getFullName());
+            contactField.setText(currentUser.getPhone() != null ? currentUser.getPhone() : "");
+        } else {
+            guestNameField.clear();
+            contactField.clear();
+        }
         checkInPicker.setValue(LocalDate.now());
         checkOutPicker.setValue(LocalDate.now().plusDays(1));
     }
@@ -463,6 +473,12 @@ public class BookingController {
         Booking booking = checkoutRoomCombo.getValue();
         if (booking == null) {
             billOutput.setText("Select an occupied room to checkout");
+            return;
+        }
+
+        // Prevent checkout before the guest has checked in.
+        if (LocalDate.now().isBefore(booking.getCheckIn())) {
+            billOutput.setText("Cannot checkout an upcoming reservation before check-in date.");
             return;
         }
 
@@ -523,12 +539,7 @@ public class BookingController {
             // This prevents issues where multiple bookings for same room get collapsed into one entry
             java.util.List<Booking> bookedBookings = hotelService.getAllBookings().stream()
                     .filter(b -> !b.isCheckedOut())
-                    .filter(b -> {
-                        // Check if booking should be visible for checkout (checkin date passed, checkout in future)
-                        LocalDate today = LocalDate.now();
-                        return (today.isEqual(b.getCheckIn()) || today.isAfter(b.getCheckIn())) &&
-                               (today.isBefore(b.getCheckOut()) || today.isEqual(b.getCheckOut()));
-                    })
+                    // Show all active reservations so users can find what they just booked.
                     .sorted((b1, b2) -> Integer.compare(b1.getRoomNumber(), b2.getRoomNumber()))
                     .collect(Collectors.toList());
             checkoutRoomCombo.setItems(FXCollections.observableArrayList(bookedBookings));
@@ -554,7 +565,6 @@ public class BookingController {
                 .collect(Collectors.toList());
         bookingTable.setItems(FXCollections.observableArrayList(active));
         
-        bookingStatus.setText("");
         updatePricePreview();
     }
 

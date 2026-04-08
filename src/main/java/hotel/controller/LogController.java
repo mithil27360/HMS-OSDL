@@ -90,7 +90,7 @@ public class LogController {
         btnRow.getChildren().addAll(refreshBtn, clearBtn);
 
 
-        Label bookLogTitle = new Label("Audit Trail: Producer-Consumer Log Queue");
+        Label bookLogTitle = new Label("Audit Trail: Active Booking Events");
         bookLogTitle.setStyle("-fx-text-fill: #7f8c8d; -fx-font-size: 12px;");
         bookLogArea = new TextArea();
         bookLogArea.getStyleClass().add("text-area-audit");
@@ -178,9 +178,12 @@ public class LogController {
                 bookLogArea.setText("No active session audit trail.");
             } else {
                 StringBuilder sb = new StringBuilder();
-                log.forEach(b -> sb.append("[AUDIT] Room ").append(b.getRoomNumber())
-                                   .append(" -> ").append(b.getGuestName())
-                                   .append(" [").append(b.getCheckIn()).append("]\n"));
+                // CRITICAL FIX: Show only active bookings (not checked out) for audit trail
+                log.stream()
+                   .filter(b -> !b.isCheckedOut())
+                   .forEach(b -> sb.append("[AUDIT] Room ").append(b.getRoomNumber())
+                                    .append(" -> ").append(b.getGuestName())
+                                    .append(" [").append(b.getCheckIn()).append("]\n"));
                 bookLogArea.setText(sb.toString());
             }
         }

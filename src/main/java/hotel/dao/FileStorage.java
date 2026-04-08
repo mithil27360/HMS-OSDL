@@ -1,14 +1,20 @@
 package hotel.dao;
 
 import hotel.model.Bill;
+import hotel.model.Booking;
 import hotel.model.Room;
 
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import java.util.Properties;
 import java.util.Objects;
@@ -28,6 +34,34 @@ public class FileStorage {
     private static String BOOKINGS_FILE;
     private static String LOG_FILE;
     private static int MAX_LOG_LINES;
+
+    // Strict deserialization allowlists to mitigate object stream abuse.
+    private static final Set<String> COMMON_ALLOWED_CLASSES = Set.of(
+        "java.util.ArrayList",
+        "java.lang.String",
+        "java.lang.Integer",
+        "java.lang.Long",
+        "java.lang.Double",
+        "java.lang.Float",
+        "java.lang.Boolean",
+        "java.lang.Object",
+        "[Ljava.lang.Object;",
+        "java.time.LocalDate",
+        "java.time.Ser"
+    );
+
+    private static final Set<String> ROOMS_ALLOWED_CLASSES = buildAllowedClasses(
+        "hotel.model.Room",
+        "hotel.model.Room$RoomType"
+    );
+
+    private static final Set<String> BOOKINGS_ALLOWED_CLASSES = buildAllowedClasses(
+        "hotel.model.Booking"
+    );
+
+    private static final Set<String> BILLS_ALLOWED_CLASSES = buildAllowedClasses(
+        "hotel.model.Bill"
+    );
 
     static {
         try (InputStream is = FileStorage.class.getResourceAsStream(CONFIG_FILE)) {
@@ -81,13 +115,11 @@ public class FileStorage {
         }
     }
 
-    @SuppressWarnings("unchecked")
     public static List<Room> loadRooms() {
         if (!Files.exists(Paths.get(ROOMS_FILE))) return new ArrayList<>();
-        try (ObjectInputStream ois = new ObjectInputStream(
-                new BufferedInputStream(new FileInputStream(ROOMS_FILE)))) {
-            return (List<Room>) ois.readObject();
-        } catch (IOException | ClassNotFoundException e) {
+        try {
+            return readValidatedList(Paths.get(ROOMS_FILE), ROOMS_ALLOWED_CLASSES, Room.class);
+        } catch (IOException | ClassNotFoundException | SecurityException e) {
             writeLog("Persistence Error [LoadRooms]", e);
             return new ArrayList<>();
         }
@@ -129,28 +161,93 @@ public class FileStorage {
         }
     }
 
-    @SuppressWarnings("unchecked")
-    public static List<hotel.model.Booking> loadBookings() {
+    public static List<Booking> loadBookings() {
         if (!Files.exists(Paths.get(BOOKINGS_FILE))) return new ArrayList<>();
-        try (ObjectInputStream ois = new ObjectInputStream(
-                new BufferedInputStream(new FileInputStream(BOOKINGS_FILE)))) {
-            return (List<hotel.model.Booking>) ois.readObject();
-        } catch (IOException | ClassNotFoundException e) {
+        try {
+            return readValidatedList(Paths.get(BOOKINGS_FILE), BOOKINGS_ALLOWED_CLASSES, Booking.class);
+        } catch (IOException | ClassNotFoundException | SecurityException e) {
             writeLog("Persistence Error [LoadBookings]", e);
             return new ArrayList<>();
         }
     }
 
 
-    @SuppressWarnings("unchecked")
     public static List<Bill> loadBills() {
         if (!Files.exists(Paths.get(BILLS_FILE))) return new ArrayList<>();
-        try (ObjectInputStream ois = new ObjectInputStream(
-                new BufferedInputStream(new FileInputStream(BILLS_FILE)))) {
-            return (List<Bill>) ois.readObject();
-        } catch (IOException | ClassNotFoundException e) {
+        try {
+            return readValidatedList(Paths.get(BILLS_FILE), BILLS_ALLOWED_CLASSES, Bill.class);
+        } catch (IOException | ClassNotFoundException | SecurityException e) {
             System.err.println("Load Error [Bills]: " + e.getMessage());
             return new ArrayList<>();
+        }
+    }
+
+    private static Set<String> buildAllowedClasses(String... additional) {
+        Set<String> allowed = new HashSet<>(COMMON_ALLOWED_CLASSES);
+        for (String cls : additional) {
+            allowed.add(cls);
+        }
+        return allowed;
+    }
+
+    private static ObjectInputStream createFilteredInputStream(InputStream input, Set<String> allowedClasses) throws IOException {
+        ObjectInputStream ois = new ObjectInputStream(input);
+        ois.setObjectInputFilter(info -> {
+            if (info.depth() > 32 || info.references() > 50_000 || info.arrayLength() > 100_000) {
+                return ObjectInputFilter.Status.REJECTED;
+            }
+
+            Class<?> clazz = info.serialClass();
+            if (clazz == null) {
+                return ObjectInputFilter.Status.UNDECIDED;
+            }
+
+            if (clazz.isPrimitive()) {
+                return ObjectInputFilter.Status.ALLOWED;
+            }
+
+            if (clazz.isArray()) {
+                Class<?> component = clazz;
+                while (component.isArray()) {
+                    component = component.getComponentType();
+                }
+                if (component.isPrimitive()) {
+                    return ObjectInputFilter.Status.ALLOWED;
+                }
+                return isClassAllowed(component, allowedClasses)
+                    ? ObjectInputFilter.Status.ALLOWED
+                    : ObjectInputFilter.Status.REJECTED;
+            }
+
+            return isClassAllowed(clazz, allowedClasses)
+                ? ObjectInputFilter.Status.ALLOWED
+                : ObjectInputFilter.Status.REJECTED;
+        });
+        return ois;
+    }
+
+    private static boolean isClassAllowed(Class<?> clazz, Set<String> allowedClasses) {
+        return allowedClasses.contains(clazz.getName());
+    }
+
+    private static <T> List<T> readValidatedList(Path filePath, Set<String> allowedClasses, Class<T> elementType)
+            throws IOException, ClassNotFoundException {
+        try (ObjectInputStream ois = createFilteredInputStream(
+                new BufferedInputStream(Files.newInputStream(filePath)), allowedClasses)) {
+            Object data = ois.readObject();
+            if (!(data instanceof List<?> rawList)) {
+                throw new InvalidObjectException("Unexpected persisted format: expected List");
+            }
+
+            List<T> validated = new ArrayList<>(rawList.size());
+            for (Object item : rawList) {
+                if (!elementType.isInstance(item)) {
+                    throw new InvalidObjectException("Unexpected list element type: " +
+                        (item == null ? "null" : item.getClass().getName()));
+                }
+                validated.add(elementType.cast(item));
+            }
+            return validated;
         }
     }
 
@@ -159,16 +256,27 @@ public class FileStorage {
     }
 
     public static void writeLog(String message, Throwable throwable) {
-        // Optimized Log Rotation check: uses file size instead of reading all lines
+        // Rotation check avoids loading the entire file into memory.
         try {
             Path logPath = Paths.get(LOG_FILE);
             if (Files.exists(logPath) && Files.size(logPath) > 5 * 1024 * 1024) { // Rotate at ~5MB
-                List<String> lines = Files.readAllLines(logPath);
-                if (lines.size() >= MAX_LOG_LINES) {
-                    List<String> truncated = new ArrayList<>();
+                Deque<String> tail = new ArrayDeque<>(2000);
+                int lineCount = 0;
+                try (BufferedReader br = Files.newBufferedReader(logPath)) {
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        lineCount++;
+                        if (tail.size() == 2000) {
+                            tail.removeFirst();
+                        }
+                        tail.addLast(line);
+                    }
+                }
+                if (lineCount >= MAX_LOG_LINES) {
+                    List<String> truncated = new ArrayList<>(tail.size() + 1);
                     truncated.add("[LOG] System statistics reset due to rotation. Continuing log.");
-                    truncated.addAll(lines.subList(lines.size() - 2000, lines.size()));
-                    Files.write(logPath, truncated);
+                    truncated.addAll(tail);
+                    Files.write(logPath, truncated, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
                 }
             }
         } catch (IOException e) {
