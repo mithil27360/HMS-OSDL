@@ -12,14 +12,20 @@ public interface IHotelService {
     
     /**
      * Reserves a room for a guest.
+     * @param bookedByUsername Username of staff/user making the booking
      * @throws RoomAlreadyBookedException if the room is already occupied.
      */
     void bookRoom(int roomNumber, String guestName, String contact, int days, 
-                  java.time.LocalDate checkIn, java.time.LocalDate checkOut) throws RoomAlreadyBookedException;
+                  java.time.LocalDate checkIn, java.time.LocalDate checkOut, String bookedByUsername) throws RoomAlreadyBookedException;
     
     boolean isRoomAvailableForDates(int roomNumber, java.time.LocalDate checkIn, java.time.LocalDate checkOut);
 
     Bill checkoutRoom(int roomNumber);
+
+    /**
+     * Checkout by specific booking ID - preferred to avoid room collisions.
+     */
+    Bill checkoutBooking(int bookingId);
 
     
     List<Room> getAllRooms();

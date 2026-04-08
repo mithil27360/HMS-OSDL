@@ -95,6 +95,10 @@ public class FileStorage {
     public static void saveBill(Bill bill) {
         List<Bill> bills = loadBills();  // loads existing
         bills.add(bill);
+        saveBills(bills);
+    }
+
+    public static void saveBills(List<Bill> bills) {
         Path tmp = Paths.get(BILLS_FILE + ".tmp");
         Path real = Paths.get(BILLS_FILE);
         try (ObjectOutputStream oos = new ObjectOutputStream(
@@ -104,7 +108,7 @@ public class FileStorage {
             Files.move(tmp, real, java.nio.file.StandardCopyOption.REPLACE_EXISTING,
                                   java.nio.file.StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException e) {
-            writeLog("Persistence Error [SaveBill]", e);
+            writeLog("Persistence Error [SaveBills]", e);
             try { Files.deleteIfExists(tmp); } catch (IOException ignored) {}
         }
     }

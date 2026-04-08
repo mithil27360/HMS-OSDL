@@ -26,6 +26,7 @@ public class HotelService implements IHotelService {
     
     private final BlockingQueue<Pair<Integer, String>> bookingLogQueue;
     private final AtomicInteger billCounter;
+    private final AtomicInteger bookingCounter;
     private final ExecutorService roomServiceExecutor;
 
     private HotelService() {
@@ -48,6 +49,12 @@ public class HotelService implements IHotelService {
                 .max()
                 .orElse(0);
         billCounter = new AtomicInteger(maxId + 1);
+
+        int maxBookingId = bookings.stream()
+                .mapToInt(Booking::getBookingId)
+                .max()
+                .orElse(0);
+        bookingCounter = new AtomicInteger(maxBookingId + 1);
 
         roomServiceExecutor = Executors.newFixedThreadPool(4);
         
@@ -100,7 +107,7 @@ public class HotelService implements IHotelService {
 
     @Override
     public void bookRoom(int roomNumber, String guestName, String contact, int days,
-                         java.time.LocalDate checkIn, java.time.LocalDate checkOut) throws RoomAlreadyBookedException {
+                         java.time.LocalDate checkIn, java.time.LocalDate checkOut, String bookedByUsername) throws RoomAlreadyBookedException {
         Room room = roomMap.get(roomNumber);
         if (room == null) throw new IllegalArgumentException("Room no longer exists.");
 
@@ -110,17 +117,18 @@ public class HotelService implements IHotelService {
             }
 
             Booking booking = new Booking(
-                (int)(System.currentTimeMillis() % 1000000), 
-                roomNumber, guestName, contact, checkIn, checkOut
+                bookingCounter.getAndIncrement(),
+                roomNumber, guestName, contact, bookedByUsername, checkIn, checkOut
             );
 
             try {
                 bookings.add(booking);
                 FileStorage.saveBookings(bookings);
                 bookingLogQueue.offer(new Pair<>(roomNumber, guestName));
-                FileStorage.writeLog("Room " + roomNumber + " reserved for " + checkIn + " to " + checkOut);
+                FileStorage.writeLog("Room " + roomNumber + " reserved for " + checkIn + " to " + checkOut + " by " + bookedByUsername);
             } catch (Exception e) {
                 bookings.remove(booking);
+                bookingCounter.decrementAndGet();
                 FileStorage.writeLog("Booking rollback for room " + roomNumber + ": " + e.getMessage());
                 throw new RuntimeException("Booking failed.", e);
             }
@@ -185,23 +193,54 @@ public class HotelService implements IHotelService {
 
             if (activeBooking == null) return null;
 
-            Bill bill = new Bill(billCounter.getAndIncrement(), room, activeBooking);
+            return performCheckout(activeBooking);
+        }
+    }
 
-            try {
-                activeBooking.setCheckedOut(true);
-                bills.add(bill);
-                FileStorage.saveBill(bill);
-                FileStorage.saveBookings(bookings);
-                FileStorage.writeLog("Room " + roomNumber + " checked out. Bill: " + bill.getBillId());
-                startBackgroundServices(roomNumber);
-                return bill;
-            } catch (Exception e) {
-                activeBooking.setCheckedOut(false);
-                bills.remove(bill);
-                billCounter.decrementAndGet();
-                FileStorage.writeLog("Checkout rollback for room " + roomNumber + ": " + e.getMessage());
-                return null;
-            }
+    /**
+     * Checkout by booking ID - preferred method to avoid room number collisions.
+     * CRITICAL FIX: Uses specific booking ID instead of room number to prevent checking out wrong booking.
+     */
+    public Bill checkoutBooking(int bookingId) {
+        synchronized (bookings) {
+            Booking activeBooking = bookings.stream()
+                .filter(b -> b.getBookingId() == bookingId && !b.isCheckedOut())
+                .findFirst()
+                .orElse(null);
+
+            if (activeBooking == null) return null;
+
+            return performCheckout(activeBooking);
+        }
+    }
+
+    /**
+     * Internal method to perform checkout and persist bill atomically with bookings.
+     * CRITICAL FIX: Saves full bills list to prevent race conditions in concurrent checkouts.
+     */
+    private Bill performCheckout(Booking activeBooking) {
+        int roomNumber = activeBooking.getRoomNumber();
+        Room room = roomMap.get(roomNumber);
+        if (room == null) return null;
+
+        Bill bill = new Bill(billCounter.getAndIncrement(), room, activeBooking);
+
+        try {
+            activeBooking.setCheckedOut(true);
+            bills.add(bill);
+            
+            // CRITICAL FIX: Save bills as full list to prevent concurrent write race condition
+            FileStorage.saveBills(new ArrayList<>(bills));
+            FileStorage.saveBookings(bookings);
+            FileStorage.writeLog("Room " + roomNumber + " checked out. Bill: " + bill.getBillId());
+            startBackgroundServices(roomNumber);
+            return bill;
+        } catch (Exception e) {
+            activeBooking.setCheckedOut(false);
+            bills.remove(bill);
+            billCounter.decrementAndGet();
+            FileStorage.writeLog("Checkout rollback for room " + roomNumber + ": " + e.getMessage());
+            return null;
         }
     }
 

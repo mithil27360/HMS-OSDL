@@ -37,7 +37,8 @@ public class BookingController {
     private Label bookingStatus;
     private Label pricePreview;
 
-    private ComboBox<Integer> checkoutRoomCombo;
+    private ComboBox<Integer> checkoutRoomCombo;  // Now stores booking IDs instead of room numbers
+    private java.util.Map<Integer, hotel.model.Booking> bookingMap;  // Maps combo values (booking IDs) to Booking objects
     private TextArea billOutput;
     private TableView<Booking> bookingTable;
 
@@ -45,6 +46,7 @@ public class BookingController {
         this.hotelService = hotelService;
         this.authService = AuthService.getInstance();
         this.currentUser = authService.getCurrentUser();
+        this.bookingMap = new java.util.HashMap<>();
         buildView();
     }
 
@@ -208,7 +210,21 @@ public class BookingController {
         checkoutRoomCombo = new ComboBox<>();
         checkoutRoomCombo.getStyleClass().add("combo-box");
         checkoutRoomCombo.setMaxWidth(Double.MAX_VALUE);
-        checkoutRoomCombo.setConverter(getRoomStringConverter());
+        checkoutRoomCombo.setConverter(new StringConverter<>() {
+            @Override
+            public String toString(Integer bookingId) {
+                if (bookingId == null) return "";
+                Booking b = bookingMap.get(bookingId);
+                if (b == null) return "Booking #" + bookingId;
+                Room r = hotelService.getRoomByNumber(b.getRoomNumber());
+                String roomInfo = r != null ? " - " + r.getRoomType().getDisplayName() : "";
+                return String.format("Room %d%s | Guest: %s | Booking #%d", 
+                    b.getRoomNumber(), roomInfo, b.getGuestName(), bookingId);
+            }
+
+            @Override
+            public Integer fromString(String string) { return null; }
+        });
 
         Button checkoutBtn = new Button("Process Checkout");
         checkoutBtn.getStyleClass().add("btn-success");
@@ -389,7 +405,8 @@ public class BookingController {
 
         // Step 13: Call hotelService.bookRoom(...)
         try {
-            hotelService.bookRoom(roomNum, name, contact, (int)days, checkIn, checkOut);
+            String bookedByUsername = currentUser != null ? currentUser.getUsername() : "system";
+            hotelService.bookRoom(roomNum, name, contact, (int)days, checkIn, checkOut, bookedByUsername);
             
             // Show success popup with details
             Alert alert = new Alert(Alert.AlertType.INFORMATION);
@@ -437,21 +454,21 @@ public class BookingController {
 
     private void handleCheckout() {
         // Step 1: Check checkoutRoomCombo.getValue() != null
-        Integer roomNum = checkoutRoomCombo.getValue();
-        if (roomNum == null) {
+        Integer bookingId = checkoutRoomCombo.getValue();
+        if (bookingId == null) {
             billOutput.setText("Select an occupied room to checkout");
             return;
         }
 
-        // Step 2: Get room = hotelService.getRoomByNumber(roomNum). Check room != null
-        Room room = hotelService.getRoomByNumber(roomNum);
-        if (room == null) {
-            billOutput.setText("Selected room no longer exists");
+        // Step 2: Get booking from map
+        Booking booking = bookingMap.get(bookingId);
+        if (booking == null) {
+            billOutput.setText("Selected booking no longer exists");
             return;
         }
 
-        // Step 3: Call hotelService.checkoutRoom(roomNum)
-        Bill bill = hotelService.checkoutRoom(roomNum);
+        // Step 3: Call hotelService.checkoutBooking(bookingId) - CRITICAL FIX: use booking ID not room number
+        Bill bill = hotelService.checkoutBooking(bookingId);
         if (bill == null) {
             billOutput.setText("Checkout failed. Try again.");
             return;
@@ -502,11 +519,24 @@ public class BookingController {
         roomCombo.setItems(FXCollections.observableArrayList(avail));
         
         if (currentUser != null && (currentUser.isAdmin() || currentUser.isReceptionist())) {
-            java.util.List<Integer> bookedToday = hotelService.getBookedRooms(LocalDate.now()).stream()
-                    .map(Room::getRoomNumber)
+            // CRITICAL FIX: Populate checkout combo with booking IDs instead of room numbers
+            // This prevents issues where multiple bookings for same room get collapsed into one entry
+            bookingMap.clear();
+            java.util.List<Integer> bookedBookingIds = hotelService.getAllBookings().stream()
+                    .filter(b -> !b.isCheckedOut())
+                    .filter(b -> {
+                        // Check if booking should be visible today (checkin date passed, checkout in future)
+                        LocalDate today = LocalDate.now();
+                        return (today.isEqual(b.getCheckIn()) || today.isAfter(b.getCheckIn())) &&
+                               (today.isBefore(b.getCheckOut()) || today.isEqual(b.getCheckOut()));
+                    })
+                    .map(b -> {
+                        bookingMap.put(b.getBookingId(), b);
+                        return b.getBookingId();
+                    })
                     .sorted()
                     .collect(Collectors.toList());
-            checkoutRoomCombo.setItems(FXCollections.observableArrayList(bookedToday));
+            checkoutRoomCombo.setItems(FXCollections.observableArrayList(bookedBookingIds));
         }
 
         java.util.List<Booking> active = hotelService.getAllBookings().stream()
@@ -514,10 +544,15 @@ public class BookingController {
                 .filter(b -> {
                     if (currentUser == null) return false;
                     if (currentUser.isGuest()) {
-                        // Guest only sees their own - handle name variations (Mithil vs Mithil S)
+                        // CRITICAL FIX: Guest only sees their own bookings by name OR by bookedByUsername
                         String bName = b.getGuestName().toLowerCase().trim();
                         String uName = currentUser.getFullName().toLowerCase().trim();
-                        return bName.contains(uName) || uName.contains(bName);
+                        String bookedBy = b.getBookedByUsername() != null ? b.getBookedByUsername().toLowerCase().trim() : "";
+                        String currentUsername = currentUser.getUsername().toLowerCase().trim();
+                        
+                        // Show booking if: name matches (with flexibility) OR booked by current user OR booked by current username
+                        return (bName.contains(uName) || uName.contains(bName)) || 
+                               bookedBy.equals(currentUsername);
                     }
                     return true; // Staff see all
                 })
