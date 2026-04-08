@@ -5,34 +5,53 @@
 
 .root {
     -fx-font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
     -fx-base: #f4f4f6;
+    background-color: #f4f4f6;
     -fx-accent: #3498db;
 }
+
 
 /* ─── SIDEBAR ────────────────────────────────────────────────────────── */
 .sidebar {
     -fx-background-color: #ffffff;
+    background-color: #ffffff;
     -fx-border-color: transparent #f0f0f0 transparent transparent;
+    border-color: transparent #f0f0f0 transparent transparent;
     -fx-border-width: 0 1 0 0;
+    border-width: 0 1 0 0;
 }
+
 
 .sidebar-brand {
     -fx-padding: 36 24;
+    padding: 36 24;
     -fx-alignment: center-left;
 }
 
+
 .nav-title {
     -fx-text-fill: #2c3e50;
+    color: #2c3e50;
     -fx-font-size: 20px;
+    font-size: 20px;
     -fx-font-weight: bold;
+    font-weight: bold;
     -fx-letter-spacing: 2.5;
+    letter-spacing: 2.5px;
 }
+
+
 
 .nav-subtitle {
     -fx-text-fill: #bdc3c7;
+    color: #bdc3c7;
     -fx-font-size: 10px;
+    font-size: 10px;
     -fx-font-weight: bold;
+    font-weight: bold;
 }
+
 
 .sidebar-btn-container {
     -fx-padding: 8 16;
@@ -55,12 +74,18 @@
 
 .nav-btn-active {
     -fx-background-color: #3498db;
+    background-color: #3498db;
     -fx-text-fill: white;
+    color: white;
     -fx-font-weight: bold;
+    font-weight: bold;
     -fx-background-radius: 8;
+    border-radius: 8;
     -fx-padding: 12 16;
+    padding: 12 16;
     -fx-alignment: center-left;
 }
+
 
 .sidebar-bottom {
     -fx-padding: 24;
@@ -71,8 +96,11 @@
 /* ─── CONTENT AREA ────────────────────────────────────────────────────── */
 .content-area {
     -fx-padding: 30;
+    padding: 30;
     -fx-background-color: #f4f4f6;
+    background-color: #f4f4f6;
 }
+
 
 .section-title {
     -fx-text-fill: #2c3e50;
@@ -82,12 +110,17 @@
 
 .panel-card {
     -fx-background-color: #ffffff;
+    background-color: #ffffff;
     -fx-background-radius: 12;
+    border-radius: 12;
     -fx-padding: 24;
+    padding: 24;
     -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.05), 10, 0, 0, 4);
     -fx-border-color: #f0f0f0;
+    border-color: #f0f0f0;
     -fx-border-radius: 12;
 }
+
 
 .gold-divider {
     -fx-background-color: #3498db66;
@@ -99,23 +132,35 @@
 /* ─── CARDS ──────────────────────────────────────────────────────────── */
 .stat-card {
     -fx-background-color: #ffffff;
+    background-color: #ffffff;
     -fx-background-radius: 12;
+    border-radius: 12;
     -fx-padding: 20;
+    padding: 20;
     -fx-min-width: 170;
+    min-width: 170;
     -fx-border-color: #f0f0f0;
+    border-color: #f0f0f0;
     -fx-border-radius: 12;
     -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.04), 10, 0, 0, 4);
 }
 
+
 .stat-card-gold {
     -fx-background-color: #f0fff4; /* Success background */
+    background-color: #f0fff4;
     -fx-background-radius: 12;
+    border-radius: 12;
     -fx-padding: 20;
+    padding: 20;
     -fx-min-width: 170;
+    min-width: 170;
     -fx-border-color: #38a169;
+    border-color: #38a169;
     -fx-border-radius: 12;
     -fx-effect: dropshadow(gaussian, rgba(56,161,105,0.1), 10, 0, 0, 4);
 }
+
 
 .stat-label {
     -fx-text-fill: #7f8c8d;
@@ -160,13 +205,20 @@
 /* ─── FORM ELEMENTS ──────────────────────────────────────────────────── */
 .text-field, .password-field, .combo-box, .date-picker {
     -fx-background-color: #ffffff;
+    background-color: #ffffff;
     -fx-border-color: #bdc3c7;
+    border-color: #bdc3c7;
     -fx-border-radius: 8;
+    border-radius: 8;
     -fx-background-radius: 8;
     -fx-padding: 10 12;
+    padding: 10 12;
     -fx-font-size: 13px;
+    font-size: 13px;
     -fx-text-fill: #2c3e50;
+    color: #2c3e50;
 }
+
 
 .text-field:focused, .combo-box:focused, .date-picker:focused {
     -fx-border-color: #3498db;
@@ -182,11 +234,17 @@
 /* ─── BUTTONS ────────────────────────────────────────────────────────── */
 .btn-primary {
     -fx-background-color: #3498db;
+    background-color: #3498db;
     -fx-text-fill: white;
+    color: white;
     -fx-font-weight: bold;
+    font-weight: bold;
     -fx-background-radius: 8;
+    border-radius: 8;
     -fx-cursor: hand;
+    cursor: pointer;
 }
+
 
 .btn-primary:hover {
     -fx-background-color: #2980b9;
@@ -194,11 +252,17 @@
 
 .btn-success {
     -fx-background-color: #2ecc71;
+    background-color: #2ecc71;
     -fx-text-fill: white;
+    color: white;
     -fx-font-weight: bold;
+    font-weight: bold;
     -fx-background-radius: 8;
+    border-radius: 8;
     -fx-cursor: hand;
+    cursor: pointer;
 }
+
 
 .btn-success:hover {
     -fx-background-color: #27ae60;
@@ -206,11 +270,17 @@
 
 .btn-danger {
     -fx-background-color: #e74c3c;
+    background-color: #e74c3c;
     -fx-text-fill: white;
+    color: white;
     -fx-font-weight: bold;
+    font-weight: bold;
     -fx-background-radius: 8;
+    border-radius: 8;
     -fx-cursor: hand;
+    cursor: pointer;
 }
+
 
 .btn-danger:hover {
     -fx-background-color: #c0392b;

@@ -6,10 +6,6 @@ import javafx.application.Application;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
 
-/**
- * Main JavaFX Application (Week 9 - Stage and Scene)
- * Starts with Login screen, then navigates to role-based main UI.
- */
 public class MainApp extends Application {
 
     private Stage primaryStage;

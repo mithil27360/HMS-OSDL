@@ -1,9 +1,7 @@
 package hotel.util;
 
 /**
- * Generic Pair class with two type parameters (Week 7 - Generics).
- * Used to associate room numbers with guest details.
- * No type casting required.
+ * Generic Pair class to hold two values of different types.
  */
 public class Pair<T, U> {
     private T first;

@@ -1,27 +1,29 @@
 package hotel.dao;
 
+import hotel.exception.AuthException;
+import hotel.exception.UserNotFoundException;
 import hotel.model.User;
 import java.io.*;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
- * Authentication Service — manages users, login, and secure persistence.
- * Features: SHA-256 Hashing, Thread-Safe Singleton, and Local Serialization.
+ * Professional implementation of user authentication and management service.
  */
-public class AuthService {
+public class AuthService implements IAuthService {
 
-    private static final String USERS_FILE = "hotel_users.dat";
+    private final String USERS_FILE = FileStorage.getUsersFile();
     private List<User> users;
     private User currentUser;
 
-    // ─── Thread-Safe Singleton (Static Holder Pattern) ───────────────────────
     private AuthService() {
-        users = loadUsers();
+        users = new java.util.concurrent.CopyOnWriteArrayList<>(loadUsers());
         if (users.isEmpty()) seedDefaultUsers();
     }
+
 
     private static class Holder {
         private static final AuthService INSTANCE = new AuthService();
@@ -31,7 +33,6 @@ public class AuthService {
         return Holder.INSTANCE;
     }
 
-    // ─── Password Hashing (SHA-256) ──────────────────────────────────────────
     private String hashPassword(String password) {
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
@@ -44,78 +45,103 @@ public class AuthService {
             }
             return hexString.toString();
         } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("Hashing algorithm not found", e);
+            throw new RuntimeException("Critical security error: Hashing algorithm not found", e);
         }
     }
 
-    // ─── Seed default accounts ────────────────────────────────────────────────
     private void seedDefaultUsers() {
-        users.clear(); // Ensure fresh start for hashing update
-        users.add(new User("admin",        hashPassword("admin123"),  "Admin Manager",     "admin@hms.com",  User.Role.ADMIN));
-        users.add(new User("receptionist", hashPassword("staff123"),  "Priya Sharma",      "priya@hms.com",  User.Role.RECEPTIONIST));
-        users.add(new User("guest",        hashPassword("guest123"),  "Rahul Kumar",       "rahul@email.com",       User.Role.GUEST));
+        users.clear();
+        users.add(new User("admin",        hashPassword("admin123"),        "Tony Stark",     "stark@avengers.com",     User.Role.ADMIN));
+        users.add(new User("staff",         hashPassword("staff123"),        "Harry Potter",    "h.potter@hogwarts.com",  User.Role.RECEPTIONIST));
+        users.add(new User("guest",        hashPassword("guest123"),        "James Bond",      "007@mi6.gov.uk",         User.Role.GUEST));
         saveUsers();
     }
 
-    // ─── Login ────────────────────────────────────────────────────────────────
-    public User login(String username, String password) {
+    @Override
+    public User login(String username, String password) throws AuthException, UserNotFoundException {
         String hashedInput = hashPassword(password);
-        for (User u : users) {
-            if (u.getUsername().equals(username) &&
-                u.getPassword().equals(hashedInput) &&
-                u.isActive()) {
-                currentUser = u;
-                FileStorage.writeLog("Login: " + u.getFullName() + " [" + u.getRole() + "]");
-                return u;
-            }
+        
+        User user;
+        synchronized (users) {
+            user = users.stream()
+                    .filter(u -> u.getUsername().equalsIgnoreCase(username))
+                    .findFirst()
+                    .orElseThrow(() -> new UserNotFoundException(username));
         }
-        return null;
+
+        if (!user.isActive()) {
+            throw new AuthException("Account is deactivated.");
+        }
+
+        if (user.getPassword().equals(hashedInput)) {
+            currentUser = user;
+            FileStorage.writeLog("Login: " + user.getFullName() + " [" + user.getRole() + "]");
+            return user;
+        } else {
+            throw new AuthException("Invalid password for user: " + username);
+        }
     }
 
+    @Override
     public void logout() {
-        if (currentUser != null)
+        if (currentUser != null) {
             FileStorage.writeLog("Logout: " + currentUser.getFullName());
+        }
         currentUser = null;
     }
 
+    @Override
     public User getCurrentUser() { return currentUser; }
 
-    // ─── User CRUD (Admin only) ───────────────────────────────────────────────
+    @Override
     public boolean addUser(User user) {
-        for (User u : users) {
-            if (u.getUsername().equals(user.getUsername())) return false; 
+        synchronized (users) {
+            boolean exists = users.stream().anyMatch(u -> u.getUsername().equalsIgnoreCase(user.getUsername()));
+            if (exists) return false;
+
+            user.setPassword(hashPassword(user.getPassword()));
+            users.add(user);
+            saveUsers();
+            FileStorage.writeLog("User added: " + user.getUsername() + " [" + user.getRole() + "]");
+            return true;
         }
-        // Hash password if adding new user
-        user.setPassword(hashPassword(user.getPassword()));
-        users.add(user);
-        saveUsers();
-        FileStorage.writeLog("User added: " + user.getUsername() + " [" + user.getRole() + "]");
-        return true;
     }
 
+    @Override
     public boolean deleteUser(String username) {
-        boolean removed = users.removeIf(u -> u.getUsername().equals(username) && !u.getUsername().equals("admin"));
-        if (removed) {
-            saveUsers(); // Fix: Persist deletion to disk
-            FileStorage.writeLog("User deleted: " + username);
+        synchronized (users) {
+            boolean removed = users.removeIf(u -> u.getUsername().equals(username) && !u.getUsername().equals("admin"));
+            if (removed) {
+                saveUsers();
+                FileStorage.writeLog("User deleted: " + username);
+            }
+            return removed;
         }
-        return removed;
     }
 
+    @Override
     public List<User> getAllUsers() { return new ArrayList<>(users); }
 
+    @Override
     public List<User> getUsersByRole(User.Role role) {
-        List<User> result = new ArrayList<>();
-        for (User u : users) if (u.getRole() == role) result.add(u);
-        return result;
+        // Filter by role
+
+        return users.stream()
+                .filter(u -> u.getRole() == role)
+                .collect(Collectors.toList());
     }
 
-    // ─── Serialization ────────────────────────────────────────────────────────
     private void saveUsers() {
-        try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(USERS_FILE))) {
-            oos.writeObject(users);
+        java.nio.file.Path tmp = java.nio.file.Paths.get(USERS_FILE + ".tmp");
+        java.nio.file.Path real = java.nio.file.Paths.get(USERS_FILE);
+        try (ObjectOutputStream oos = new ObjectOutputStream(
+                new BufferedOutputStream(java.nio.file.Files.newOutputStream(tmp)))) {
+            oos.writeObject(new ArrayList<>(users));
+            java.nio.file.Files.move(tmp, real, java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                                          java.nio.file.StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException e) {
-            System.out.println("User save error: " + e.getMessage());
+            FileStorage.writeLog("User persistence error: " + e.getMessage());
+            try { java.nio.file.Files.deleteIfExists(tmp); } catch (IOException ignored) {}
         }
     }
 

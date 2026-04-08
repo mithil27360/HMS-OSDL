@@ -1,46 +1,69 @@
 package hotel.dao;
 
+import hotel.exception.RoomAlreadyBookedException;
 import hotel.model.Bill;
 import hotel.model.Room;
-import hotel.util.GenericUtils;
+import hotel.model.Booking;
 import hotel.util.Pair;
+import hotel.util.RoomServiceThread;
 
 import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
 
 /**
- * Hotel Service layer managing rooms, bookings, and financial logic.
- * Features: Static Holder Singleton, Thread-safe Synchronized methods, 
- * and robust ID generation.
+ * Modern implementation of hotel management services.
  */
-public class HotelService {
+public class HotelService implements IHotelService {
 
-    private ArrayList<Room> rooms;
-    private HashMap<Integer, Room> roomMap;
-    private ArrayList<Bill> bills;
-    private ArrayList<Pair<Integer, String>> bookingLog;
+    private final List<Room> rooms;
+    private final Map<Integer, Room> roomMap;
+    private final List<Bill> bills;
+    private final List<Booking> bookings;
+    private final Set<Integer> cleaningRooms;
+    
+    private final BlockingQueue<Pair<Integer, String>> bookingLogQueue;
+    private final AtomicInteger billCounter;
+    private final ExecutorService roomServiceExecutor;
 
-    private int billCounter = 1;
-
-    // ─── Thread-Safe Singleton (Static Holder Pattern) ───────────────────────
     private HotelService() {
-        rooms = new ArrayList<>(FileStorage.loadRooms());
-        roomMap = new HashMap<>();
-        bills = new ArrayList<>(FileStorage.loadBills());
-        bookingLog = new ArrayList<>();
+        rooms = new CopyOnWriteArrayList<>(FileStorage.loadRooms());
+        roomMap = new ConcurrentHashMap<>();
+        bills = new CopyOnWriteArrayList<>(FileStorage.loadBills());
+        bookings = new CopyOnWriteArrayList<>(FileStorage.loadBookings());
+        cleaningRooms = ConcurrentHashMap.newKeySet();
+        bookingLogQueue = new LinkedBlockingQueue<>();
+        
+        rooms.forEach(r -> roomMap.put(r.getRoomNumber(), r));
 
-        for (Room r : rooms) {
-            roomMap.put(r.getRoomNumber(), r);
-        }
 
         if (rooms.isEmpty()) {
             seedDefaultRooms();
         }
 
-        // Fix: Reliable Bill ID Calculation
-        billCounter = bills.stream()
+        int maxId = bills.stream()
                 .mapToInt(Bill::getBillId)
                 .max()
-                .orElse(0) + 1;
+                .orElse(0);
+        billCounter = new AtomicInteger(maxId + 1);
+
+        roomServiceExecutor = Executors.newFixedThreadPool(4);
+        
+        // Resource cleanup: Shutdown executor on JVM exit
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            roomServiceExecutor.shutdown();
+            try {
+                if (!roomServiceExecutor.awaitTermination(3, TimeUnit.SECONDS)) {
+                    roomServiceExecutor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                roomServiceExecutor.shutdownNow();
+            }
+        }));
+
+        startLogConsumer();
 
         FileStorage.writeLog("System initialized. Rooms loaded: " + rooms.size());
     }
@@ -53,7 +76,6 @@ public class HotelService {
         return Holder.INSTANCE;
     }
 
-    // ─── SEED DATA ───────────────────────────────────────────────────────────
     private void seedDefaultRooms() {
         addRoom(new Room(101, Room.RoomType.STANDARD));
         addRoom(new Room(102, Room.RoomType.STANDARD));
@@ -66,7 +88,7 @@ public class HotelService {
         saveData();
     }
 
-    // ─── ROOM MANAGEMENT ─────────────────────────────────────────────────────
+    @Override
     public synchronized void addRoom(Room room) {
         if (!roomMap.containsKey(room.getRoomNumber())) {
             rooms.add(room);
@@ -76,143 +98,270 @@ public class HotelService {
         }
     }
 
-    public synchronized boolean bookRoom(int roomNumber, String guestName,
-                                          String contact, int days,
-                                          String checkIn, String checkOut) {
+    @Override
+    public void bookRoom(int roomNumber, String guestName, String contact, int days,
+                         java.time.LocalDate checkIn, java.time.LocalDate checkOut) throws RoomAlreadyBookedException {
         Room room = roomMap.get(roomNumber);
-        if (room == null) return false;
+        if (room == null) throw new IllegalArgumentException("Room no longer exists.");
 
-        synchronized (room) {
-            if (room.isBooked()) return false;
+        synchronized (bookings) {
+            if (!isRoomAvailableForDates(roomNumber, checkIn, checkOut)) {
+                throw new RoomAlreadyBookedException("Room " + roomNumber + " is already reserved for these dates.");
+            }
 
-            room.setBooked(true);
-            room.setGuestName(guestName);
-            room.setGuestContact(contact);
-            room.setDaysBooked(days);
-            room.setCheckInDate(checkIn);
-            room.setCheckOutDate(checkOut);
+            Booking booking = new Booking(
+                (int)(System.currentTimeMillis() % 1000000), 
+                roomNumber, guestName, contact, checkIn, checkOut
+            );
 
-            bookingLog.add(new Pair<>(roomNumber, guestName));
-            FileStorage.writeLog("Room " + roomNumber + " booked by " + guestName);
-            saveData();
+            try {
+                bookings.add(booking);
+                FileStorage.saveBookings(bookings);
+                bookingLogQueue.offer(new Pair<>(roomNumber, guestName));
+                FileStorage.writeLog("Room " + roomNumber + " reserved for " + checkIn + " to " + checkOut);
+            } catch (Exception e) {
+                bookings.remove(booking);
+                FileStorage.writeLog("Booking rollback for room " + roomNumber + ": " + e.getMessage());
+                throw new RuntimeException("Booking failed.", e);
+            }
+        }
+    }
+
+    @Override
+    public boolean isRoomAvailableForDates(int roomNumber, java.time.LocalDate checkIn, java.time.LocalDate checkOut) {
+        // 1. Check Maintenance
+        if (cleaningRooms.contains(roomNumber) && !checkIn.isAfter(java.time.LocalDate.now())) {
+            return false;
+        }
+
+        synchronized (bookings) {
+            // 2. Check Overlaps
+            boolean hasOverlap = bookings.stream()
+                .filter(b -> b.getRoomNumber() == roomNumber)
+                .anyMatch(b -> b.overlaps(checkIn, checkOut));
+            
+            if (hasOverlap) return false;
+
+            // 3. Strict Check-in: If today is the requested check-in day,
+            // check if there is an outgoing guest who HAS NOT checked out yet.
+            if (checkIn.isEqual(java.time.LocalDate.now())) {
+                boolean hasUncheckedOutGuest = bookings.stream()
+                    .filter(b -> b.getRoomNumber() == roomNumber && !b.isCheckedOut())
+                    .anyMatch(b -> b.getCheckOut().isEqual(checkIn));
+                
+                if (hasUncheckedOutGuest) return false;
+            }
+
             return true;
         }
     }
 
-    public synchronized Bill checkoutRoom(int roomNumber) {
-        Room room = roomMap.get(roomNumber);
-        if (room == null || !room.isBooked()) return null;
 
-        Integer days = room.getDaysBooked();
+    private void startBackgroundServices(int roomNumber) {
+        cleaningRooms.add(roomNumber);
         
-        // Use incrementing counter based on max ID
-        Bill bill = new Bill(billCounter++, room, days);
-        bills.add(bill);
-        FileStorage.saveBill(bill);
+        Runnable onComplete = () -> {
+            // Check if both services are done (we use a simple count or just wait for both)
+            // For simplicity in this demo, one thread removal is enough to show logic
+            cleaningRooms.remove(roomNumber);
+            FileStorage.writeLog("Room " + roomNumber + " is now sanitized and READY for next guest.");
+        };
 
-        GenericUtils.display("Checkout - Room " + roomNumber + " | Total: ₹" + bill.getTotalAmount());
-
-        room.setBooked(false);
-        room.setGuestName("");
-        room.setGuestContact("");
-        room.setDaysBooked(0);
-        room.setCheckInDate("");
-        room.setCheckOutDate("");
-
-        FileStorage.writeLog("Room " + roomNumber + " checked out. Bill: ₹" + bill.getTotalAmount());
-        saveData();
-        return bill;
+        roomServiceExecutor.submit(new RoomServiceThread("Cleaning & Sanitization", roomNumber, onComplete));
     }
 
-    // ─── QUERIES ─────────────────────────────────────────────────────────────
-    public ArrayList<Room> getAllRooms() { return rooms; }
+    @Override
+    public Bill checkoutRoom(int roomNumber) {
+        Room room = roomMap.get(roomNumber);
+        if (room == null) return null;
 
-    public ArrayList<Room> getAvailableRooms() {
-        ArrayList<Room> available = new ArrayList<>();
-        Iterator<Room> it = rooms.iterator();
-        while (it.hasNext()) {
-            Room r = it.next();
-            if (!r.isBooked()) available.add(r);
+        synchronized (bookings) {
+            java.time.LocalDate today = java.time.LocalDate.now();
+            Booking activeBooking = bookings.stream()
+                .filter(b -> b.getRoomNumber() == roomNumber && !b.isCheckedOut())
+                .filter(b -> (today.isEqual(b.getCheckIn()) || today.isAfter(b.getCheckIn())))
+                .findFirst()
+                .orElse(null);
+
+            if (activeBooking == null) return null;
+
+            Bill bill = new Bill(billCounter.getAndIncrement(), room, activeBooking);
+
+            try {
+                activeBooking.setCheckedOut(true);
+                bills.add(bill);
+                FileStorage.saveBill(bill);
+                FileStorage.saveBookings(bookings);
+                FileStorage.writeLog("Room " + roomNumber + " checked out. Bill: " + bill.getBillId());
+                startBackgroundServices(roomNumber);
+                return bill;
+            } catch (Exception e) {
+                activeBooking.setCheckedOut(false);
+                bills.remove(bill);
+                billCounter.decrementAndGet();
+                FileStorage.writeLog("Checkout rollback for room " + roomNumber + ": " + e.getMessage());
+                return null;
+            }
         }
-        return available;
     }
 
-    public ArrayList<Room> getBookedRooms() {
-        ArrayList<Room> booked = new ArrayList<>();
-        for (Room r : rooms) {
-            if (r.isBooked()) booked.add(r);
+    @Override
+
+    public List<Room> getAllRooms() {
+        return new ArrayList<>(rooms);
+    }
+
+    @Override
+    public List<Room> getAvailableRooms(java.time.LocalDate start, java.time.LocalDate end) {
+        synchronized (rooms) {
+            return rooms.stream()
+                    .filter(r -> isRoomAvailableForDates(r.getRoomNumber(), start, end))
+                    .collect(Collectors.toList());
         }
-        return booked;
     }
 
-    public Room getRoomByNumber(int number) { return roomMap.get(number); }
-    public ArrayList<Bill> getAllBills() { return bills; }
+    @Override
+    public List<Room> getBookedRooms(java.time.LocalDate date) {
+        synchronized (bookings) {
+            Set<Integer> bookedRoomNumbers = bookings.stream()
+                .filter(b -> !b.isCheckedOut())
+                .filter(b -> (date.isEqual(b.getCheckIn()) || date.isAfter(b.getCheckIn())) && 
+                             (date.isEqual(b.getCheckOut()) || date.isBefore(b.getCheckOut())))
+                .map(Booking::getRoomNumber)
+                .collect(Collectors.toSet());
 
-    public ArrayList<Room> getRoomsByType(Room.RoomType type) {
-        ArrayList<Room> result = new ArrayList<>();
-        for (Room r : rooms) {
-            if (r.getRoomType() == type) result.add(r);
+            return rooms.stream()
+                .filter(r -> bookedRoomNumbers.contains(r.getRoomNumber()))
+                .collect(Collectors.toList());
         }
-        return result;
     }
 
-    public ArrayList<Room> getRoomsSortedByPrice() {
-        ArrayList<Room> sorted = new ArrayList<>(rooms);
-        Collections.sort(sorted, Comparator.comparingDouble(Room::getPricePerNight));
+
+    @Override
+    public Room getRoomByNumber(int number) {
+        return roomMap.get(number);
+    }
+
+    @Override
+    public List<Bill> getAllBills() {
+        return new ArrayList<>(bills);
+    }
+
+    @Override
+    public List<Room> getRoomsByType(Room.RoomType type) {
+        return rooms.stream()
+                .filter(r -> r.getRoomType() == type)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<Room> getRoomsSortedByPrice() {
+        // Sort with Comparator
+
+        List<Room> sorted = new ArrayList<>(rooms);
+        sorted.sort(Comparator.comparingDouble(Room::getPricePerNight));
         return sorted;
     }
 
-    public ArrayList<Room> getRoomsSortedByNumber() {
-        ArrayList<Room> sorted = new ArrayList<>(rooms);
-        Collections.sort(sorted, Comparator.comparingInt(Room::getRoomNumber));
+    @Override
+    public List<Room> getRoomsSortedByNumber() {
+        List<Room> sorted = new ArrayList<>(rooms);
+        sorted.sort(Comparator.comparingInt(Room::getRoomNumber));
         return sorted;
     }
 
-    public int getTotalRooms() { return rooms.size(); }
-    public int getAvailableCount() { return getAvailableRooms().size(); }
-    public int getOccupiedCount() { return getBookedRooms().size(); }
-
+    @Override
     public double getTotalRevenue() {
-        double total = 0.0;
-        for (Bill b : bills) {
-            total += b.getTotalAmount();
-        }
-        return total;
+        // Stream reduce for aggregation
+
+        return bills.stream()
+                .mapToDouble(Bill::getTotalAmount)
+                .sum();
     }
 
-    public double getDiscountedPrice(double price, double discountPercent) {
-        return GenericUtils.calculateDiscountedPrice(price, discountPercent);
-    }
-
+    @Override
     public boolean deleteRoom(int roomNumber) {
         Room room = roomMap.get(roomNumber);
-        if (room == null || room.isBooked()) return false;
-        rooms.remove(room);
-        roomMap.remove(roomNumber);
-        saveData();
-        FileStorage.writeLog("Room " + roomNumber + " removed.");
-        return true;
+        if (room == null) {
+            FileStorage.writeLog("Delete failed: room " + roomNumber + " not found.");
+            return false;
+        }
+        if (isRoomAvailableForDates(roomNumber, java.time.LocalDate.now(), java.time.LocalDate.now().plusDays(1))) {
+            rooms.remove(room);
+            roomMap.remove(roomNumber);
+            saveData();
+            FileStorage.writeLog("Room " + roomNumber + " removed.");
+            return true;
+        }
+        FileStorage.writeLog("Delete rejected: room " + roomNumber + " has active bookings.");
+        return false;
     }
 
+
+    @Override
+    public boolean isRoomCleaning(int roomNumber) {
+        return cleaningRooms.contains(roomNumber);
+    }
+
+    @Override
+    public boolean cancelBooking(int bookingId) {
+        synchronized (bookings) {
+            Booking found = bookings.stream()
+                .filter(b -> b.getBookingId() == bookingId)
+                .findFirst()
+                .orElse(null);
+
+            if (found != null) {
+                bookings.remove(found);
+                FileStorage.saveBookings(bookings);
+                FileStorage.writeLog("Booking CANCELLED: #" + bookingId + " for room " + found.getRoomNumber());
+                return true;
+            }
+            return false;
+        }
+    }
+
+    @Override
     public synchronized void resetSystemData() {
         FileStorage.clearBills();
         FileStorage.clearLog();
         bills.clear();
-        bookingLog.clear();
-        billCounter = 1;
-        for (Room r : rooms) {
-            r.setBooked(false);
-            r.setGuestName("");
-            r.setGuestContact("");
-            r.setDaysBooked(0);
-            r.setCheckInDate("");
-            r.setCheckOutDate("");
-        }
+        bookings.clear();
+        FileStorage.saveBookings(bookings);
+        bookingLogQueue.clear();
+        billCounter.set(1);
         saveData();
-        FileStorage.writeLog("System hard reset performed by administrator.");
+        FileStorage.writeLog("System hard reset performed.");
     }
 
-    private void saveData() { FileStorage.saveRooms(rooms); }
-    public String getActivityLog() { return FileStorage.readLog(); }
-    public List<Pair<Integer, String>> getBookingLog() { return bookingLog; }
+    private void startLogConsumer() {
+        Thread consumerThread = new Thread(() -> {
+            while (true) {
+                try {
+                    // Consumer: Take entry from queue, blocking if empty
+                    Pair<Integer, String> entry = bookingLogQueue.take();
+                    System.out.println("[AUDIT] Processing booking log: Room " + entry.getFirst() + " by " + entry.getSecond());
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        });
+        consumerThread.setDaemon(true);
+        consumerThread.start();
+    }
+
+    private void saveData() {
+        FileStorage.saveRooms(rooms);
+    }
+
+    @Override
+    public String getActivityLog() {
+        return FileStorage.readLog();
+    }
+
+    @Override
+    public List<Booking> getAllBookings() {
+        return new ArrayList<>(bookings);
+    }
 }

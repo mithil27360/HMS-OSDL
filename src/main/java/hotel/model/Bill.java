@@ -1,12 +1,9 @@
 package hotel.model;
 
 import java.io.Serializable;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 
 /**
  * Bill model for billing management feature.
- * Uses Wrapper classes (Integer, Double) and autoboxing concepts.
  */
 public class Bill implements Serializable {
     private static final long serialVersionUID = 2L;
@@ -15,51 +12,47 @@ public class Bill implements Serializable {
     private int roomNumber;
     private String guestName;
     private String roomType;
-    private Double pricePerNight;    // Wrapper class (Week 2)
-    private Integer numberOfDays;    // Wrapper class (Week 2)
-    private Double roomCharge;
-    private Double serviceCharge;    // 10% service charge
-    private Double taxAmount;        // 18% GST
-    private Double totalAmount;
+    private double pricePerNight;
+    private int numberOfDays;
+    private double roomCharge;
+    private double serviceCharge;
+    private double taxAmount;
+    private double totalAmount;
     private String checkInDate;
     private String checkOutDate;
 
     public Bill() {}
 
-    public Bill(int billId, Room room, int days) {
+    public Bill(int billId, Room room, Booking booking) {
         this.billId = billId;
         this.roomNumber = room.getRoomNumber();
-        this.guestName = room.getGuestName();
+        this.guestName = booking.getGuestName();
         this.roomType = room.getRoomType().getDisplayName();
-
-        // Autoboxing: primitive to wrapper
         this.pricePerNight = room.getPricePerNight();
-        this.numberOfDays = days;
+        
+        java.time.temporal.ChronoUnit unit = java.time.temporal.ChronoUnit.DAYS;
+        this.numberOfDays = (int) unit.between(booking.getCheckIn(), booking.getCheckOut());
+        if (this.numberOfDays <= 0) this.numberOfDays = 1;
 
-        // Unboxing: wrapper to primitive for arithmetic
-        double price = pricePerNight;  // unboxing
-        int numDays = numberOfDays;    // unboxing
-
-        this.roomCharge = price * numDays;
+        this.roomCharge = pricePerNight * numberOfDays;
         this.serviceCharge = roomCharge * 0.10;
         this.taxAmount = (roomCharge + serviceCharge) * 0.18;
         this.totalAmount = roomCharge + serviceCharge + taxAmount;
 
-        this.checkOutDate = room.getCheckOutDate();
-        this.checkInDate = room.getCheckInDate();
+        this.checkOutDate = booking.getCheckOut().toString();
+        this.checkInDate = booking.getCheckIn().toString();
     }
 
-    // Getters
     public int getBillId() { return billId; }
     public int getRoomNumber() { return roomNumber; }
     public String getGuestName() { return guestName; }
     public String getRoomType() { return roomType; }
-    public Double getPricePerNight() { return pricePerNight; }
-    public Integer getNumberOfDays() { return numberOfDays; }
-    public Double getRoomCharge() { return roomCharge; }
-    public Double getServiceCharge() { return serviceCharge; }
-    public Double getTaxAmount() { return taxAmount; }
-    public Double getTotalAmount() { return totalAmount; }
+    public double getPricePerNight() { return pricePerNight; }
+    public int getNumberOfDays() { return numberOfDays; }
+    public double getRoomCharge() { return roomCharge; }
+    public double getServiceCharge() { return serviceCharge; }
+    public double getTaxAmount() { return taxAmount; }
+    public double getTotalAmount() { return totalAmount; }
     public String getCheckInDate() { return checkInDate; }
     public String getCheckOutDate() { return checkOutDate; }
 

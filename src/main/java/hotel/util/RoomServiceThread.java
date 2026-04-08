@@ -1,10 +1,9 @@
 package hotel.util;
 
+import hotel.dao.FileStorage;
+
 /**
- * Room Service Thread demonstrating:
- * - Thread creation using Runnable interface (Week 3)
- * - sleep() method (Week 3)
- * - Inter-thread communication concept (Week 4)
+ * Task representing a room service activity.
  */
 public class RoomServiceThread implements Runnable {
 
@@ -13,7 +12,6 @@ public class RoomServiceThread implements Runnable {
     private final Runnable onComplete;
     private volatile boolean running = true;
 
-    // Thread creation via Runnable interface (Week 3)
     public RoomServiceThread(String serviceName, int roomNumber, Runnable onComplete) {
         this.serviceName = serviceName;
         this.roomNumber = roomNumber;
@@ -22,51 +20,24 @@ public class RoomServiceThread implements Runnable {
 
     @Override
     public void run() {
-        System.out.println(serviceName + " started for Room " + roomNumber);
+        FileStorage.writeLog("Room service [" + serviceName + "] started for room " + roomNumber);
         try {
-            // sleep() - Week 3
-            for (int i = 1; i <= 3 && running; i++) {
-                System.out.println(serviceName + " - Step " + i + " for Room " + roomNumber);
-                Thread.sleep(300);
-                Thread.yield(); // yield() - Week 3
-            }
+            // Simulate service time
+            Thread.sleep(2000); 
+            
             if (running) {
-                System.out.println(serviceName + " completed for Room " + roomNumber);
-                if (onComplete != null) onComplete.run();
+                FileStorage.writeLog("Room service [" + serviceName + "] completed for room " + roomNumber);
             }
         } catch (InterruptedException e) {
-            System.out.println(serviceName + " interrupted.");
+            System.err.println(serviceName + " interrupted for Room " + roomNumber);
             Thread.currentThread().interrupt();
+            FileStorage.writeLog("Room service [" + serviceName + "] interrupted for room " + roomNumber);
+        } finally {
+            if (onComplete != null) onComplete.run();
         }
     }
 
     public void stop() {
         running = false;
-    }
-
-    /**
-     * Start multiple service threads simultaneously (Week 3)
-     */
-    public static void startRoomServices(int roomNumber) {
-        RoomServiceThread cleaning = new RoomServiceThread("Room Cleaning", roomNumber, null);
-        RoomServiceThread foodDelivery = new RoomServiceThread("Food Delivery", roomNumber, null);
-        RoomServiceThread maintenance = new RoomServiceThread("Maintenance Check", roomNumber, null);
-
-        Thread t1 = new Thread(cleaning, "Cleaning-Thread");
-        Thread t2 = new Thread(foodDelivery, "Food-Thread");
-        Thread t3 = new Thread(maintenance, "Maintenance-Thread");
-
-        t1.start();
-        t2.start();
-        t3.start();
-
-        try {
-            t1.join(); // join() - Week 3
-            t2.join();
-            t3.join();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-        System.out.println("All room services for Room " + roomNumber + " completed.");
     }
 }

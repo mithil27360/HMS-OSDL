@@ -1,6 +1,6 @@
 package hotel.controller;
 
-import hotel.dao.HotelService;
+import hotel.dao.IHotelService;
 import hotel.model.Bill;
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
@@ -10,15 +10,9 @@ import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.*;
 
-/**
- * Billing Management Controller
- * - View all past bills
- * - Show full bill details
- * - Revenue summary using Wrapper classes
- */
 public class BillingController {
 
-    private final HotelService hotelService;
+    private final IHotelService hotelService; 
     private VBox view;
     private TableView<Bill> billTable;
     private TextArea billDetail;
@@ -26,7 +20,7 @@ public class BillingController {
     private Label billCountLabel;
     private Label avgBillLabel;
 
-    public BillingController(HotelService hotelService) {
+    public BillingController(IHotelService hotelService) {
         this.hotelService = hotelService;
         buildView();
     }
@@ -36,22 +30,17 @@ public class BillingController {
         view.setPadding(new Insets(30));
         view.setStyle("-fx-background-color: #f4f4f6;");
 
-        // Header
         Label title = new Label("Billing & Revenue Management");
         title.setStyle("-fx-text-fill: #2c3e50; -fx-font-size: 22px; -fx-font-weight: bold;");
 
-        // Stats row
         HBox statsRow = buildStatsRow();
 
-        // Main: table + detail
         HBox mainRow = new HBox(20);
         VBox.setVgrow(mainRow, Priority.ALWAYS);
 
-        // Bill table
         VBox tablePanel = buildTablePanel();
         HBox.setHgrow(tablePanel, Priority.ALWAYS);
 
-        // Bill detail panel
         VBox detailPanel = buildDetailPanel();
         detailPanel.setMinWidth(340);
         detailPanel.setMaxWidth(340);
@@ -66,7 +55,6 @@ public class BillingController {
         HBox row = new HBox(16);
         row.setAlignment(Pos.CENTER_LEFT);
 
-        // Wrapper class usage for display
         totalRevLabel = new Label("₹0");
         billCountLabel = new Label("0");
         avgBillLabel = new Label("₹0");
@@ -143,7 +131,6 @@ public class BillingController {
         billTable.getColumns().addAll(colId, colGuest, colRoom, colType, colDays, colTotal, colDate);
         billTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
 
-        // Show bill detail on row click (Event handling - Week 9)
         billTable.getSelectionModel().selectedItemProperty().addListener((obs, old, newVal) -> {
             if (newVal != null) billDetail.setText(newVal.generateBillText());
         });
@@ -167,38 +154,7 @@ public class BillingController {
         billDetail.setPromptText("Click a bill row to preview...");
         VBox.setVgrow(billDetail, Priority.ALWAYS);
 
-        // Discount calculator (Bounded generics - Week 7)
-        Label discTitle = new Label("Discount Calculator");
-        discTitle.setStyle("-fx-text-fill: #7f8c8d; -fx-font-size: 13px; -fx-font-weight: bold;");
-
-        HBox discRow = new HBox(8);
-        discRow.setAlignment(Pos.CENTER_LEFT);
-        TextField discField = new TextField("10");
-        discField.getStyleClass().add("text-field");
-        discField.setMaxWidth(60);
-        discField.setPromptText("%");
-        Label discResult = new Label();
-        discResult.setStyle("-fx-text-fill: #2ecc71; -fx-font-size: 12px;");
-
-        Button calcBtn = new Button("Calc");
-        calcBtn.getStyleClass().add("btn-secondary");
-        calcBtn.setOnAction(e -> {
-            Bill sel = billTable.getSelectionModel().getSelectedItem();
-            if (sel == null) { discResult.setText("Select a bill"); return; }
-            try {
-                double pct = Double.parseDouble(discField.getText());
-                // Bounded generic method
-                double discounted = hotelService.getDiscountedPrice(sel.getTotalAmount(), pct);
-                discResult.setText(String.format("₹%.2f (%.0f%% off)", discounted, pct));
-            } catch (NumberFormatException ex) {
-                discResult.setText("Invalid %");
-            }
-        });
-        discRow.getChildren().addAll(new Label("Disc %:"), discField, calcBtn, discResult);
-        discRow.setStyle("-fx-padding: 0;");
-        ((Label)discRow.getChildren().get(0)).setStyle("-fx-text-fill: #7f8c8d; -fx-font-size: 12px;");
-
-        panel.getChildren().addAll(title, div, billDetail, discTitle, discRow);
+        panel.getChildren().addAll(title, div, billDetail);
         return panel;
     }
 
@@ -206,10 +162,11 @@ public class BillingController {
         java.util.List<Bill> bills = hotelService.getAllBills();
         billTable.setItems(FXCollections.observableArrayList(bills));
 
-        // Wrapper class usage: Double for arithmetic
-        Double total = hotelService.getTotalRevenue();  // wrapper
-        Integer count = bills.size();                   // wrapper (autoboxing)
-        Double avg = count > 0 ? total / count : 0.0;  // unboxing arithmetic
+        // Calculate and show stats from the service
+
+        double total = hotelService.getTotalRevenue();
+        int count = bills.size();
+        double avg = count > 0 ? total / count : 0.0;
 
         totalRevLabel.setText("₹" + String.format("%.0f", total));
         billCountLabel.setText(String.valueOf(count));
