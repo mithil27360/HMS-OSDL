@@ -1,0 +1,31 @@
+package hotel.util;
+
+/**
+ * Generic Pair class with two type parameters (Week 7 - Generics).
+ * Used to associate room numbers with guest details.
+ * No type casting required.
+ */
+public class Pair<T, U> {
+    private T first;
+    private U second;
+
+    public Pair(T first, U second) {
+        this.first = first;
+        this.second = second;
+    }
+
+    public T getFirst() { return first; }
+    public U getSecond() { return second; }
+
+    public void setFirst(T first) { this.first = first; }
+    public void setSecond(U second) { this.second = second; }
+
+    public void display() {
+        System.out.println("First: " + first + " | Second: " + second);
+    }
+
+    @Override
+    public String toString() {
+        return "Pair[" + first + " -> " + second + "]";
+    }
+}
