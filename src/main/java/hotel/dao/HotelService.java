@@ -213,7 +213,6 @@ public class HotelService implements IHotelService {
         if (room == null) return null;
 
         synchronized (bookings) {
-            java.time.LocalDate today = java.time.LocalDate.now();
             Booking activeBooking = bookings.stream()
                 .filter(b -> b.getRoomNumber() == roomNumber && !b.isCheckedOut())
                 .filter(b -> b.isCheckedIn()) // Can only checkout if they checked in
@@ -308,11 +307,30 @@ public class HotelService implements IHotelService {
 
     @Override
     public double getTotalRevenue() {
-        // Stream reduce for aggregation
-
         return bills.stream()
                 .mapToDouble(Bill::getTotalAmount)
                 .sum();
+    }
+
+    @Override
+    public double getProjectedRevenue() {
+        synchronized (bookings) {
+            return bookings.stream()
+                .filter(b -> !b.isCheckedIn() && !b.isCheckedOut())
+                .mapToDouble(b -> {
+                    Room r = roomMap.get(b.getRoomNumber());
+                    if (r == null) return 0.0;
+                    long nights = java.time.temporal.ChronoUnit.DAYS.between(b.getCheckIn(), b.getCheckOut());
+                    if (nights < 1) nights = 1;
+                    return r.getPricePerNight() * nights * 1.298; // Base * Days * Tax
+                })
+                .sum();
+        }
+    }
+
+    @Override
+    public double getTotalPotentialRevenue() {
+        return getTotalRevenue() + getProjectedRevenue();
     }
 
     @Override

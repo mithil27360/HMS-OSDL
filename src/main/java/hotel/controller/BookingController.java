@@ -28,18 +28,17 @@ public class BookingController {
     private final User currentUser;
 
     private VBox view;
-
+    private TableView<Booking> bookingTable;
     private ComboBox<Integer> roomCombo;
+    private ComboBox<Integer> checkinRoomCombo;
+    private ComboBox<Integer> checkoutRoomCombo;
     private TextField guestNameField;
     private TextField contactField;
     private DatePicker checkInPicker;
     private DatePicker checkOutPicker;
     private Label bookingStatus;
     private Label pricePreview;
-
-    private ComboBox<Integer> checkoutRoomCombo;
     private TextArea billOutput;
-    private TableView<Booking> bookingTable;
 
     public BookingController(IHotelService hotelService, MainController mainController) {
         this.hotelService = hotelService;
@@ -65,9 +64,9 @@ public class BookingController {
         bookPanel.setMaxWidth(320);
 
         if (currentUser != null && (currentUser.isAdmin() || currentUser.isReceptionist())) {
-            VBox checkoutPanel = buildCheckoutPanel();
-            HBox.setHgrow(checkoutPanel, Priority.ALWAYS);
-            formsRow.getChildren().addAll(bookPanel, checkoutPanel);
+            VBox opsPanel = buildOperationsPanel();
+            HBox.setHgrow(opsPanel, Priority.ALWAYS);
+            formsRow.getChildren().addAll(bookPanel, opsPanel);
         } else {
             // Guest mode: Give more space to the booking form or just show it alone
             HBox.setHgrow(bookPanel, Priority.ALWAYS);
@@ -180,40 +179,69 @@ public class BookingController {
         return panel;
     }
 
-    private VBox buildCheckoutPanel() {
-        VBox panel = new VBox(12);
+    private VBox buildOperationsPanel() {
+        VBox panel = new VBox(15);
         panel.getStyleClass().add("panel-card");
         VBox.setVgrow(panel, Priority.ALWAYS);
 
-        Label title = new Label("Checkout");
-        title.setStyle("-fx-text-fill: #3498db; -fx-font-size: 15px; -fx-font-weight: bold;");
+        Label title = new Label("Check-In & Checkout");
+        title.setStyle("-fx-text-fill: #3498db; -fx-font-size: 16px; -fx-font-weight: bold;");
         Region div = new Region(); div.getStyleClass().add("gold-divider");
 
+        // Check-In Section
+        checkinRoomCombo = new ComboBox<>();
+        checkinRoomCombo.setMaxWidth(Double.MAX_VALUE);
+        checkinRoomCombo.setConverter(getRoomStringConverter());
+        checkinRoomCombo.setPromptText("Select reservation...");
+
+        Button checkinBtn = new Button("Confirm Check-In");
+        checkinBtn.setStyle("-fx-background-color: #2ecc71; -fx-text-fill: white; -fx-font-weight: bold;");
+        checkinBtn.setMaxWidth(Double.MAX_VALUE);
+        checkinBtn.setPrefHeight(35);
+        checkinBtn.setOnAction(e -> handleCheckIn());
+
+        // Checkout Section
         checkoutRoomCombo = new ComboBox<>();
-        checkoutRoomCombo.getStyleClass().add("combo-box");
         checkoutRoomCombo.setMaxWidth(Double.MAX_VALUE);
         checkoutRoomCombo.setConverter(getRoomStringConverter());
+        checkoutRoomCombo.setPromptText("Select stay...");
 
         Button checkoutBtn = new Button("Process Checkout");
-        checkoutBtn.getStyleClass().add("btn-success");
+        checkoutBtn.setStyle("-fx-background-color: #e67e22; -fx-text-fill: white; -fx-font-weight: bold;");
         checkoutBtn.setMaxWidth(Double.MAX_VALUE);
-        checkoutBtn.setPrefHeight(40);
+        checkoutBtn.setPrefHeight(35);
         checkoutBtn.setOnAction(e -> handleCheckout());
 
         billOutput = new TextArea();
-        billOutput.getStyleClass().add("text-area");
         billOutput.setEditable(false);
-        billOutput.setPromptText("Final invoice will be generated here...");
-        billOutput.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 12px;");
-        VBox.setVgrow(billOutput, Priority.ALWAYS);
+        billOutput.setPrefRowCount(8);
+        billOutput.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 11px;");
 
-        panel.getChildren().addAll(title, div, new Label("Occupied Room"), checkoutRoomCombo, checkoutBtn, billOutput);
-        
-        Label hint = new Label("Right-click a booking below to CANCEL it.");
-        hint.setStyle("-fx-text-fill: #7f8c8d; -fx-font-size: 10px; -fx-font-style: italic;");
-        panel.getChildren().add(hint);
+        panel.getChildren().addAll(title, div, 
+            new Label("Guest Arrival (Check-In)"), checkinRoomCombo, checkinBtn, 
+            new Separator(),
+            new Label("Guest Departure (Checkout)"), checkoutRoomCombo, checkoutBtn, 
+            billOutput);
         
         return panel;
+    }
+
+    private void handleCheckIn() {
+        Integer roomNum = checkinRoomCombo.getValue();
+        if (roomNum == null) {
+            setBookStatus("Select a reservation to check in", false);
+            return;
+        }
+        try {
+            hotelService.checkInRoom(roomNum);
+            refresh();
+            Alert alert = new Alert(Alert.AlertType.INFORMATION);
+            alert.setHeaderText("Success");
+            alert.setContentText("Room " + roomNum + " is now Checked In. Bill added to Revenue.");
+            alert.showAndWait();
+        } catch (Exception e) {
+            setBookStatus(e.getMessage(), false);
+        }
     }
 
     private TableView<Booking> buildBookingTable() {
@@ -537,11 +565,25 @@ public class BookingController {
         roomCombo.setItems(FXCollections.observableArrayList(avail));
         
         if (currentUser != null && (currentUser.isAdmin() || currentUser.isReceptionist())) {
-            java.util.List<Integer> bookedToday = hotelService.getBookedRooms(LocalDate.now()).stream()
-                    .map(Room::getRoomNumber)
-                    .sorted()
-                    .collect(Collectors.toList());
-            checkoutRoomCombo.setItems(FXCollections.observableArrayList(bookedToday));
+            java.util.List<Booking> todaysBookings = hotelService.getAllBookings().stream()
+                .filter(b -> !b.isCheckedOut())
+                .filter(b -> b.getCheckIn().isEqual(LocalDate.now()) || b.getCheckIn().isBefore(LocalDate.now()))
+                .collect(Collectors.toList());
+
+            java.util.List<Integer> needsCheckin = todaysBookings.stream()
+                .filter(b -> !b.isCheckedIn())
+                .map(Booking::getRoomNumber)
+                .sorted()
+                .collect(Collectors.toList());
+            
+            java.util.List<Integer> needsCheckout = todaysBookings.stream()
+                .filter(b -> b.isCheckedIn())
+                .map(Booking::getRoomNumber)
+                .sorted()
+                .collect(Collectors.toList());
+
+            checkinRoomCombo.setItems(FXCollections.observableArrayList(needsCheckin));
+            checkoutRoomCombo.setItems(FXCollections.observableArrayList(needsCheckout));
         }
 
         java.util.List<Booking> active = hotelService.getAllBookings().stream()

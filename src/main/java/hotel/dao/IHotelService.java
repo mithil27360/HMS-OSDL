@@ -50,6 +50,16 @@ public interface IHotelService {
     
     double getTotalRevenue();
     
+    /**
+     * Calculates revenue from ALL reservations that are NOT checked in yet.
+     */
+    double getProjectedRevenue();
+    
+    /**
+     * Total Actual + Projected revenue.
+     */
+    double getTotalPotentialRevenue();
+    
     boolean deleteRoom(int roomNumber);
     
     boolean isRoomCleaning(int roomNumber);
