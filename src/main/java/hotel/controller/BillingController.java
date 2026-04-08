@@ -2,6 +2,8 @@ package hotel.controller;
 
 import hotel.dao.IHotelService;
 import hotel.model.Bill;
+import hotel.model.Booking;
+import hotel.model.Room;
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -9,16 +11,47 @@ import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.time.temporal.ChronoUnit;
 
 public class BillingController {
 
     private final IHotelService hotelService; 
     private VBox view;
-    private TableView<Bill> billTable;
+    private TableView<RevenueRecord> revenueTable;
     private TextArea billDetail;
     private Label totalRevLabel;
-    private Label billCountLabel;
-    private Label avgBillLabel;
+    private Label countLabel;
+    private Label avgLabel;
+
+    /**
+     * Helper model to unify Bills and Bookings for the UI ledger.
+     */
+    public static class RevenueRecord {
+        private final String id;
+        private final String guest;
+        private final int room;
+        private final String type;
+        private final double amount;
+        private final String date;
+        private final String status; // "PAID" or "BOOKED"
+        private final Object originalObject;
+
+        public RevenueRecord(String id, String guest, int room, String type, double amount, String date, String status, Object original) {
+            this.id = id; this.guest = guest; this.room = room; this.type = type;
+            this.amount = amount; this.date = date; this.status = status; this.originalObject = original;
+        }
+
+        public String getId() { return id; }
+        public String getGuest() { return guest; }
+        public int getRoom() { return room; }
+        public String getType() { return type; }
+        public double getAmount() { return amount; }
+        public String getDate() { return date; }
+        public String getStatus() { return status; }
+        public Object getOriginalObject() { return originalObject; }
+    }
 
     public BillingController(IHotelService hotelService) {
         this.hotelService = hotelService;
@@ -30,7 +63,7 @@ public class BillingController {
         view.setPadding(new Insets(30));
         view.setStyle("-fx-background-color: #f4f4f6;");
 
-        Label title = new Label("Billing & Revenue Management");
+        Label title = new Label("Unified Revenue Ledger");
         title.setStyle("-fx-text-fill: #2c3e50; -fx-font-size: 22px; -fx-font-weight: bold;");
 
         HBox statsRow = buildStatsRow();
@@ -56,13 +89,13 @@ public class BillingController {
         row.setAlignment(Pos.CENTER_LEFT);
 
         totalRevLabel = new Label("₹0");
-        billCountLabel = new Label("0");
-        avgBillLabel = new Label("₹0");
+        countLabel = new Label("0");
+        avgLabel = new Label("₹0");
 
         row.getChildren().addAll(
-            revCard("Total Revenue", totalRevLabel, "#3498db"),
-            revCard("Bills Generated", billCountLabel, "#3498db"),
-            revCard("Average Bill", avgBillLabel, "#9b59b6")
+            revCard("Total Combined Revenue", totalRevLabel, "#2c3e50"),
+            revCard("Total Transactions", countLabel, "#3498db"),
+            revCard("Value Per Entry", avgLabel, "#9b59b6")
         );
         return row;
     }
@@ -70,7 +103,7 @@ public class BillingController {
     private VBox revCard(String label, Label valueLabel, String color) {
         VBox card = new VBox(6);
         card.getStyleClass().add("stat-card");
-        card.setMinWidth(180);
+        card.setMinWidth(200);
 
         valueLabel.setStyle("-fx-text-fill: " + color + "; -fx-font-size: 28px; -fx-font-weight: bold;");
         Label lbl = new Label(label.toUpperCase());
@@ -83,36 +116,45 @@ public class BillingController {
     private VBox buildTablePanel() {
         VBox panel = new VBox(10);
 
-        Label title = new Label("Bill History");
+        Label title = new Label("Financial Timeline (Bills & Active Reservations)");
         title.setStyle("-fx-text-fill: #2c3e50; -fx-font-size: 15px; -fx-font-weight: bold;");
 
-        billTable = new TableView<>();
-        billTable.getStyleClass().add("table-view");
-        billTable.setPlaceholder(new Label("No bills yet"));
-        VBox.setVgrow(billTable, Priority.ALWAYS);
+        revenueTable = new TableView<>();
+        revenueTable.getStyleClass().add("table-view");
+        revenueTable.setPlaceholder(new Label("No financial activity found."));
+        VBox.setVgrow(revenueTable, Priority.ALWAYS);
 
-        TableColumn<Bill, Integer> colId = new TableColumn<>("Bill #");
-        colId.setCellValueFactory(new PropertyValueFactory<>("billId"));
+        TableColumn<RevenueRecord, String> colStatus = new TableColumn<>("Status");
+        colStatus.setCellValueFactory(new PropertyValueFactory<>("status"));
+        colStatus.setPrefWidth(90);
+        colStatus.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) { setText(null); setStyle(""); return; }
+                setText(item);
+                if (item.equals("PAID")) {
+                    setStyle("-fx-text-fill: #ffffff; -fx-background-color: #2ecc71; -fx-background-radius: 4; -fx-alignment: center; -fx-font-weight: bold; -fx-padding: 2 5 2 5;");
+                } else {
+                    setStyle("-fx-text-fill: #ffffff; -fx-background-color: #e67e22; -fx-background-radius: 4; -fx-alignment: center; -fx-font-weight: bold; -fx-padding: 2 5 2 5;");
+                }
+            }
+        });
+
+        TableColumn<RevenueRecord, String> colId = new TableColumn<>("ID");
+        colId.setCellValueFactory(new PropertyValueFactory<>("id"));
         colId.setPrefWidth(70);
 
-        TableColumn<Bill, String> colGuest = new TableColumn<>("Guest");
-        colGuest.setCellValueFactory(new PropertyValueFactory<>("guestName"));
+        TableColumn<RevenueRecord, String> colGuest = new TableColumn<>("Guest");
+        colGuest.setCellValueFactory(new PropertyValueFactory<>("guest"));
         colGuest.setPrefWidth(140);
 
-        TableColumn<Bill, Integer> colRoom = new TableColumn<>("Room");
-        colRoom.setCellValueFactory(new PropertyValueFactory<>("roomNumber"));
+        TableColumn<RevenueRecord, Integer> colRoom = new TableColumn<>("Room");
+        colRoom.setCellValueFactory(new PropertyValueFactory<>("room"));
         colRoom.setPrefWidth(80);
 
-        TableColumn<Bill, String> colType = new TableColumn<>("Type");
-        colType.setCellValueFactory(new PropertyValueFactory<>("roomType"));
-        colType.setPrefWidth(120);
-
-        TableColumn<Bill, Integer> colDays = new TableColumn<>("Days");
-        colDays.setCellValueFactory(new PropertyValueFactory<>("numberOfDays"));
-        colDays.setPrefWidth(70);
-
-        TableColumn<Bill, Double> colTotal = new TableColumn<>("Total (₹)");
-        colTotal.setCellValueFactory(new PropertyValueFactory<>("totalAmount"));
+        TableColumn<RevenueRecord, Double> colTotal = new TableColumn<>("Amount (₹)");
+        colTotal.setCellValueFactory(new PropertyValueFactory<>("amount"));
         colTotal.setPrefWidth(110);
         colTotal.setCellFactory(col -> new TableCell<>() {
             @Override
@@ -120,22 +162,37 @@ public class BillingController {
                 super.updateItem(v, empty);
                 if (empty || v == null) { setText(null); return; }
                 setText("₹" + String.format("%.2f", v));
-                setStyle("-fx-text-fill: #3498db; -fx-font-weight: bold;");
+                setStyle("-fx-text-fill: #2c3e50; -fx-font-weight: bold;");
             }
         });
 
-        TableColumn<Bill, String> colDate = new TableColumn<>("Checkout Date");
-        colDate.setCellValueFactory(new PropertyValueFactory<>("checkOutDate"));
+        TableColumn<RevenueRecord, String> colDate = new TableColumn<>("Date");
+        colDate.setCellValueFactory(new PropertyValueFactory<>("date"));
         colDate.setPrefWidth(140);
 
-        billTable.getColumns().addAll(colId, colGuest, colRoom, colType, colDays, colTotal, colDate);
-        billTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        revenueTable.getColumns().addAll(colStatus, colId, colGuest, colRoom, colTotal, colDate);
+        revenueTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
 
-        billTable.getSelectionModel().selectedItemProperty().addListener((obs, old, newVal) -> {
-            if (newVal != null) billDetail.setText(newVal.generateBillText());
+        revenueTable.getSelectionModel().selectedItemProperty().addListener((obs, old, newVal) -> {
+            if (newVal != null) {
+                Object orig = newVal.getOriginalObject();
+                if (orig instanceof Bill) {
+                    billDetail.setText(((Bill) orig).generateBillText());
+                } else if (orig instanceof Booking) {
+                    Booking b = (Booking) orig;
+                    Room r = hotelService.getRoomByNumber(b.getRoomNumber());
+                    billDetail.setText("RESERVATION PREVIEW\n" +
+                                     "--------------------\n" +
+                                     "Status: PENDING [BOOKED]\n" +
+                                     "Guest : " + b.getGuestName() + "\n" +
+                                     "Room  : " + b.getRoomNumber() + "\n" +
+                                     "Dates : " + b.getCheckIn() + " to " + b.getCheckOut() + "\n" +
+                                     "Est. Total: ₹" + String.format("%.2f", newVal.getAmount()));
+                }
+            }
         });
 
-        panel.getChildren().addAll(title, billTable);
+        panel.getChildren().addAll(title, revenueTable);
         return panel;
     }
 
@@ -144,14 +201,14 @@ public class BillingController {
         panel.getStyleClass().add("panel-card");
         VBox.setVgrow(panel, Priority.ALWAYS);
 
-        Label title = new Label("Bill Preview");
+        Label title = new Label("Ledger Detail");
         title.setStyle("-fx-text-fill: #3498db; -fx-font-size: 15px; -fx-font-weight: bold;");
         Region div = new Region(); div.getStyleClass().add("gold-divider");
 
         billDetail = new TextArea();
         billDetail.getStyleClass().add("text-area");
         billDetail.setEditable(false);
-        billDetail.setPromptText("Click a bill row to preview...");
+        billDetail.setPromptText("Select a row for financial breakdown...");
         VBox.setVgrow(billDetail, Priority.ALWAYS);
 
         panel.getChildren().addAll(title, div, billDetail);
@@ -159,18 +216,55 @@ public class BillingController {
     }
 
     public void refresh() {
-        java.util.List<Bill> bills = hotelService.getAllBills();
-        billTable.setItems(FXCollections.observableArrayList(bills));
+        List<RevenueRecord> combined = new ArrayList<>();
+        
+        // 1. Add PAID Bills
+        List<Bill> finalBills = hotelService.getAllBills();
+        for (Bill b : finalBills) {
+            combined.add(new RevenueRecord(
+                "BILL-" + b.getBillId(),
+                b.getGuestName(),
+                b.getRoomNumber(),
+                b.getRoomType(),
+                b.getTotalAmount(),
+                b.getCheckOutDate(),
+                "PAID",
+                b
+            ));
+        }
 
-        // Calculate and show stats from the service
+        // 2. Add PENDING Bookings
+        List<Booking> bookings = hotelService.getAllBookings();
+        for (Booking b : bookings) {
+            if (!b.isCheckedOut()) {
+                Room r = hotelService.getRoomByNumber(b.getRoomNumber());
+                long nights = ChronoUnit.DAYS.between(b.getCheckIn(), b.getCheckOut());
+                if (nights <= 0) nights = 1;
+                double amount = (r != null ? r.getPricePerNight() : 0.0) * nights * 1.298;
 
+                combined.add(new RevenueRecord(
+                    "RES-" + b.getBookingId(),
+                    b.getGuestName(),
+                    b.getRoomNumber(),
+                    r != null ? r.getRoomType().getDisplayName() : "N/A",
+                    amount,
+                    b.getCheckIn().toString(),
+                    "BOOKED",
+                    b
+                ));
+            }
+        }
+
+        revenueTable.setItems(FXCollections.observableArrayList(combined));
+
+        // 3. Sync stats with the Single Source of Truth
         double total = hotelService.getTotalRevenue();
-        int count = bills.size();
-        double avg = count > 0 ? total / count : 0.0;
+        int entries = combined.size();
+        double avg = entries > 0 ? total / entries : 0.0;
 
         totalRevLabel.setText("₹" + String.format("%.0f", total));
-        billCountLabel.setText(String.valueOf(count));
-        avgBillLabel.setText("₹" + String.format("%.0f", avg));
+        countLabel.setText(String.valueOf(entries));
+        avgLabel.setText("₹" + String.format("%.0f", avg));
     }
 
     public Node getView() { return view; }
