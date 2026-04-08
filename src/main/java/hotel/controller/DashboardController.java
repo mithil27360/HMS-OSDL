@@ -9,9 +9,7 @@ import javafx.scene.Node;
 import javafx.scene.control.Label;
 import javafx.scene.layout.*;
 
-/**
- * Controller for the Main Dashboard view.
- */
+
 public class DashboardController {
 
     private final IHotelService hotelService; 
@@ -52,7 +50,7 @@ public class DashboardController {
             statCard("OCCUPANCY RATE", occupancyLbl, "#9b59b6")
         );
 
-        // We need to keep a reference to projectedLbl to refresh it
+        
         view.setUserData(projectedLbl);
 
         view.getChildren().addAll(title, topRow);
@@ -79,7 +77,7 @@ public class DashboardController {
 
 
     public void refresh() {
-        // Calculate stats using the service
+        
 
         java.util.List<Room> all = hotelService.getAllRooms();
         java.util.List<Room> avail = hotelService.getAvailableRooms();

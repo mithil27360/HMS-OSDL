@@ -3,9 +3,7 @@ package hotel.model;
 import java.io.Serializable;
 import hotel.util.BillingUtils;
 
-/**
- * Bill model for billing management feature.
- */
+
 public class Bill implements Serializable {
     private static final long serialVersionUID = 2L;
 
@@ -35,7 +33,7 @@ public class Bill implements Serializable {
         this.numberOfDays = (int) unit.between(booking.getCheckIn(), booking.getCheckOut());
         if (this.numberOfDays <= 0) this.numberOfDays = 1;
 
-        // Use centralized BillingUtils for consistent calculations across the system
+        
         this.roomCharge = pricePerNight * numberOfDays;
         this.serviceCharge = roomCharge * BillingUtils.SERVICE_CHARGE_RATE;
         this.taxAmount = (roomCharge + serviceCharge) * BillingUtils.GST_RATE;

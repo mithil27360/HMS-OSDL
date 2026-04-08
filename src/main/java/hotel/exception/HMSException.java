@@ -1,8 +1,6 @@
 package hotel.exception;
 
-/**
- * Base exception for the Hotel Management System.
- */
+
 public class HMSException extends Exception {
     public HMSException(String message) {
         super(message);

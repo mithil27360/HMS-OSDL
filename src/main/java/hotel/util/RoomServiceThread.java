@@ -2,9 +2,7 @@ package hotel.util;
 
 import hotel.dao.FileStorage;
 
-/**
- * Task representing a room service activity.
- */
+
 public class RoomServiceThread implements Runnable {
 
     private final String serviceName;
@@ -22,7 +20,7 @@ public class RoomServiceThread implements Runnable {
     public void run() {
         FileStorage.writeLog("Room service [" + serviceName + "] started for room " + roomNumber);
         try {
-            // Simulate service time
+            
             Thread.sleep(2000); 
             
             if (running) {

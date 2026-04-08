@@ -10,26 +10,18 @@ public interface IHotelService {
     
     void addRoom(Room room);
     
-    /**
-     * Reserves a room for a guest.
-     * @param bookedByUsername Username of staff/user making the booking
-     * @throws RoomAlreadyBookedException if the room is already occupied.
-     */
+    
     void bookRoom(int roomNumber, String guestName, String contact, int days, 
                   java.time.LocalDate checkIn, java.time.LocalDate checkOut, String bookedByUsername) throws RoomAlreadyBookedException;
     
     boolean isRoomAvailableForDates(int roomNumber, java.time.LocalDate checkIn, java.time.LocalDate checkOut);
 
-    /**
-     * Check if a room is occupied today (critical for accurate occupancy metrics).
-     */
+    
     boolean isOccupiedToday(int roomNumber);
 
     Bill checkoutRoom(int roomNumber);
 
-    /**
-     * Checkout by specific booking ID - preferred to avoid room collisions.
-     */
+    
     Bill checkoutBooking(int bookingId);
 
     
@@ -39,7 +31,7 @@ public interface IHotelService {
     
     List<Room> getBookedRooms(java.time.LocalDate date);
     
-    // Legacy support (defaults to today)
+    
     default List<Room> getAvailableRooms() { return getAvailableRooms(java.time.LocalDate.now(), java.time.LocalDate.now().plusDays(1)); }
     default List<Room> getBookedRooms() { return getBookedRooms(java.time.LocalDate.now()); }
     

@@ -3,9 +3,7 @@ package hotel.model;
 import java.io.Serializable;
 import java.time.LocalDate;
 
-/**
- * Booking model representing a room reservation.
- */
+
 public class Booking implements Serializable {
     private static final long serialVersionUID = 5L;
 
@@ -54,9 +52,9 @@ public class Booking implements Serializable {
 
     public boolean overlaps(LocalDate start, LocalDate end) {
         if (isCheckedOut) return false;
-        // B1: checkIn to checkOut
-        // B2: start to end
-        // Conflict if: (StartA < EndB) and (EndA > StartB)
+        
+        
+        
         return start.isBefore(checkOut) && end.isAfter(checkIn);
     }
 }

@@ -2,9 +2,7 @@ package hotel.model;
 
 import java.io.Serializable;
 
-/**
- * Room model representing a hotel room.
- */
+
 public class Room implements Serializable {
     private static final long serialVersionUID = 1L;
 

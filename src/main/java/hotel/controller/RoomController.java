@@ -12,9 +12,7 @@ import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.*;
 
-/**
- * Controller for Room Inventory management.
- */
+
 public class RoomController {
 
 
@@ -155,9 +153,9 @@ public class RoomController {
                 super.updateItem(s, empty);
                 if (empty || s == null) { setText(null); return; }
                 setText(s);
-                String color = "#2ecc71"; // Green
-                if (s.equals("OCCUPIED")) color = "#e74c3c"; // Red
-                if (s.equals("CLEANING")) color = "#f39c12"; // Orange
+                String color = "#2ecc71"; 
+                if (s.equals("OCCUPIED")) color = "#e74c3c"; 
+                if (s.equals("CLEANING")) color = "#f39c12"; 
                 setStyle("-fx-text-fill: " + color + "; -fx-font-weight: bold;");
             }
         });
@@ -192,7 +190,7 @@ public class RoomController {
 
         try {
             int num = Integer.parseInt(numStr);
-            // Validation in the model setter
+            
 
             Room room = new Room(num, type);
             
@@ -209,7 +207,7 @@ public class RoomController {
         } catch (NumberFormatException e) {
             setStatus("Room number must be numeric.", false);
         } catch (IllegalArgumentException e) {
-            // Catching 3-digit validation from Room.java
+            
             setStatus("Validation Error: " + e.getMessage(), false);
         } catch (Exception e) {
             setStatus("Error: " + e.getMessage(), false);
@@ -236,12 +234,12 @@ public class RoomController {
     }
 
     public void refresh() {
-        // Sort list via Comparator
+        
 
         java.util.List<Room> rooms = hotelService.getAllRooms();
         rooms.sort(java.util.Comparator.comparingInt(Room::getRoomNumber));
         roomTable.setItems(FXCollections.observableArrayList(rooms));
-        // CRITICAL FIX: Refresh table to re-evaluate cell factories (status column)
+        
         roomTable.refresh();
     }
 

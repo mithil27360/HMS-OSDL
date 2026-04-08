@@ -11,9 +11,7 @@ import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.*;
 
-/**
- * Controller for Staff and Account management.
- */
+
 public class StaffController {
 
 
@@ -203,7 +201,7 @@ public class StaffController {
             setStatus("Invalid email format (e.g. user@domain.com).", false);
             return;
         }
-        // CRITICAL FIX: Make phone optional for staff (like in LoginController signup)
+        
         if (!phone.isEmpty() && !ValidationUtils.isValidPhone(phone)) {
             setStatus("Phone must be exactly 10 digits.", false);
             return;

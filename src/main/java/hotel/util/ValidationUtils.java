@@ -2,9 +2,7 @@ package hotel.util;
 
 import java.util.regex.Pattern;
 
-/**
- * Enterprise utility for global data validation logic.
- */
+
 public class ValidationUtils {
 
     private static final Pattern EMAIL_PATTERN = Pattern.compile(

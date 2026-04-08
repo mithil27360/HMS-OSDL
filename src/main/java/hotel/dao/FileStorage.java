@@ -19,9 +19,7 @@ import java.util.Set;
 import java.util.Properties;
 import java.util.Objects;
 
-/**
- * Enterprise Storage Manager for persistence and system auditing.
- */
+
 public class FileStorage {
 
     private static final String CONFIG_FILE = "/config.properties";
@@ -35,7 +33,7 @@ public class FileStorage {
     private static String LOG_FILE;
     private static int MAX_LOG_LINES;
 
-    // Strict deserialization allowlists to mitigate object stream abuse.
+    
     private static final Set<String> COMMON_ALLOWED_CLASSES = Set.of(
         "java.util.ArrayList",
         "java.lang.String",
@@ -67,7 +65,7 @@ public class FileStorage {
         try (InputStream is = FileStorage.class.getResourceAsStream(CONFIG_FILE)) {
             props.load(Objects.requireNonNull(is, "Config file not found: " + CONFIG_FILE));
             
-            // Base data directory
+            
             DATA_DIR = System.getProperty("user.home") + "/HMS_Data/";
             Files.createDirectories(Paths.get(DATA_DIR));
 
@@ -78,7 +76,7 @@ public class FileStorage {
             LOG_FILE   = DATA_DIR + props.getProperty("logs.path", "activity.log");
             MAX_LOG_LINES = Integer.parseInt(props.getProperty("max.log.lines", "10000"));
 
-            // Ensure parent directories for all files exist
+            
             Files.createDirectories(Paths.get(ROOMS_FILE).getParent());
             Files.createDirectories(Paths.get(BILLS_FILE).getParent());
             Files.createDirectories(Paths.get(USERS_FILE).getParent());
@@ -126,7 +124,7 @@ public class FileStorage {
     }
 
     public static void saveBill(Bill bill) {
-        List<Bill> bills = loadBills();  // loads existing
+        List<Bill> bills = loadBills();  
         bills.add(bill);
         saveBills(bills);
     }
@@ -137,7 +135,7 @@ public class FileStorage {
         try (ObjectOutputStream oos = new ObjectOutputStream(
                 new BufferedOutputStream(Files.newOutputStream(tmp)))) {
             oos.writeObject(bills);
-            // atomic move: either the full file is replaced or nothing changes
+            
             Files.move(tmp, real, java.nio.file.StandardCopyOption.REPLACE_EXISTING,
                                   java.nio.file.StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException e) {
@@ -256,10 +254,10 @@ public class FileStorage {
     }
 
     public static void writeLog(String message, Throwable throwable) {
-        // Rotation check avoids loading the entire file into memory.
+        
         try {
             Path logPath = Paths.get(LOG_FILE);
-            if (Files.exists(logPath) && Files.size(logPath) > 5 * 1024 * 1024) { // Rotate at ~5MB
+            if (Files.exists(logPath) && Files.size(logPath) > 5 * 1024 * 1024) { 
                 Deque<String> tail = new ArrayDeque<>(2000);
                 int lineCount = 0;
                 try (BufferedReader br = Files.newBufferedReader(logPath)) {

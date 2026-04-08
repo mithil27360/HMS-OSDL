@@ -14,9 +14,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
-/**
- * Modern implementation of hotel management services.
- */
+
 public class HotelService implements IHotelService {
 
     private final List<Room> rooms;
@@ -57,11 +55,11 @@ public class HotelService implements IHotelService {
                 .orElse(0);
         bookingCounter = new AtomicInteger(maxBookingId + 1);
 
-    // CRITICAL FIX: Use cached thread pool instead of fixed pool(4)
-    // Prevents room status delays when 5+ checkouts happen rapidly
+    
+    
     roomServiceExecutor = Executors.newCachedThreadPool();
         
-        // Resource cleanup: Shutdown executor on JVM exit
+        
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             roomServiceExecutor.shutdown();
             try {
@@ -138,26 +136,22 @@ public class HotelService implements IHotelService {
         }
     }
 
-    /**
-     * CRITICAL FIX: Private unsynchronized helper method.
-     * Caller MUST hold locks on both cleaningRooms and bookings before calling.
-     * Performs three checks without acquiring additional locks.
-     */
+    
     private boolean _isRoomAvailableForDatesUnsafe(int roomNumber, java.time.LocalDate checkIn, java.time.LocalDate checkOut) {
-        // 1. Check Maintenance
+        
         if (cleaningRooms.contains(roomNumber) && !checkIn.isAfter(java.time.LocalDate.now())) {
             return false;
         }
 
-        // 2. Check Overlaps
+        
         boolean hasOverlap = bookings.stream()
             .filter(b -> b.getRoomNumber() == roomNumber)
             .anyMatch(b -> b.overlaps(checkIn, checkOut));
         
         if (hasOverlap) return false;
 
-        // 3. Strict Check-in: If today is the requested check-in day,
-        // check if there is an outgoing guest who HAS NOT checked out yet.
+        
+        
         if (checkIn.isEqual(java.time.LocalDate.now())) {
             boolean hasUncheckedOutGuest = bookings.stream()
                 .filter(b -> b.getRoomNumber() == roomNumber && !b.isCheckedOut())
@@ -176,11 +170,7 @@ public class HotelService implements IHotelService {
         }
     }
 
-    /**
-     * CRITICAL FIX: Helper method to check if a room is occupied TODAY specifically.
-     * Returns true if any active booking has checkIn ≤ today < checkOut.
-     * Used for accurate occupancy rate and "occupied now" display.
-     */
+    
     @Override
     public boolean isOccupiedToday(int roomNumber) {
         java.time.LocalDate today = java.time.LocalDate.now();
@@ -197,8 +187,8 @@ public class HotelService implements IHotelService {
         cleaningRooms.add(roomNumber);
         
         Runnable onComplete = () -> {
-            // Check if both services are done (we use a simple count or just wait for both)
-            // For simplicity in this demo, one thread removal is enough to show logic
+            
+            
             cleaningRooms.remove(roomNumber);
             FileStorage.writeLog("Room " + roomNumber + " is now sanitized and READY for next guest.");
         };
@@ -225,10 +215,7 @@ public class HotelService implements IHotelService {
         }
     }
 
-    /**
-     * Checkout by booking ID - preferred method to avoid room number collisions.
-     * CRITICAL FIX: Uses specific booking ID instead of room number to prevent checking out wrong booking.
-     */
+    
     public Bill checkoutBooking(int bookingId) {
         synchronized (bookings) {
             Booking activeBooking = bookings.stream()
@@ -242,10 +229,7 @@ public class HotelService implements IHotelService {
         }
     }
 
-    /**
-     * Internal method to perform checkout and persist bill atomically with bookings.
-     * CRITICAL FIX: Saves full bills list to prevent race conditions in concurrent checkouts.
-     */
+    
     private Bill performCheckout(Booking activeBooking) {
         int roomNumber = activeBooking.getRoomNumber();
         Room room = roomMap.get(roomNumber);
@@ -257,7 +241,7 @@ public class HotelService implements IHotelService {
             activeBooking.setCheckedOut(true);
             bills.add(bill);
             
-            // CRITICAL FIX: Save bills as full list to prevent concurrent write race condition
+            
             FileStorage.saveBills(new ArrayList<>(bills));
             FileStorage.saveBookings(bookings);
             FileStorage.writeLog("Room " + roomNumber + " checked out. Bill: " + bill.getBillId());
@@ -321,7 +305,7 @@ public class HotelService implements IHotelService {
 
     @Override
     public List<Room> getRoomsSortedByPrice() {
-        // Sort with Comparator
+        
 
         List<Room> sorted = new ArrayList<>(rooms);
         sorted.sort(Comparator.comparingDouble(Room::getPricePerNight));
@@ -352,7 +336,7 @@ public class HotelService implements IHotelService {
                     if (r == null) return 0.0;
                     long days = java.time.temporal.ChronoUnit.DAYS.between(b.getCheckIn(), b.getCheckOut());
                     if (days <= 0) days = 1;
-                    // Use centralized BillingUtils instead of hardcoded 1.298
+                    
                     return r.getPricePerNight() * days * BillingUtils.getTotalMultiplier();
                 })
                 .sum();
@@ -415,7 +399,7 @@ public class HotelService implements IHotelService {
         FileStorage.saveBookings(bookings);
         bookingLogQueue.clear();
         billCounter.set(1);
-        // CRITICAL FIX: Also reset bookingCounter alongside billCounter
+        
         bookingCounter.set(1);
         saveData();
         FileStorage.writeLog("System hard reset performed.");
@@ -425,7 +409,7 @@ public class HotelService implements IHotelService {
         Thread consumerThread = new Thread(() -> {
             while (true) {
                 try {
-                    // Consumer: Take entry from queue, blocking if empty
+                    
                     Pair<Integer, String> entry = bookingLogQueue.take();
                     System.out.println("[AUDIT] Processing booking log: Room " + entry.getFirst() + " by " + entry.getSecond());
                 } catch (InterruptedException e) {

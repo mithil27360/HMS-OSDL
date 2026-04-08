@@ -14,9 +14,7 @@ import javafx.scene.layout.*;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * Main application controller managing the sidebar navigation and content switching.
- */
+
 public class MainController {
 
     private final IHotelService hotelService;
@@ -27,7 +25,7 @@ public class MainController {
     private VBox sidebar;
     private StackPane contentArea;
     private Map<String, Button> navButtons = new HashMap<>();
-    private Map<String, Node> controllerCache = new HashMap<>();  // Cache controller views to preserve state
+    private Map<String, Node> controllerCache = new HashMap<>();  
     private Map<String, Runnable> refreshActions = new HashMap<>();
     private String activeNav = "";
 
@@ -49,7 +47,7 @@ public class MainController {
         rootLayout.setLeft(sidebar);
         rootLayout.setCenter(contentArea);
 
-        // Initial view based on role
+        
         User user = authService.getCurrentUser();
         if (user != null) {
             if (user.isAdmin() || user.isReceptionist()) navigate("Dashboard");
@@ -140,11 +138,11 @@ public class MainController {
             navButtons.get(target).getStyleClass().add("nav-btn-active");
         }
 
-        // CRITICAL FIX: Cache controller views to preserve state and avoid recreating on every navigation
+        
         Node content = controllerCache.get(target);
         
         if (content == null) {
-            // Create controller only if not cached
+            
             switch (target) {
                 case "Dashboard":
                     DashboardController dashCtrl = new DashboardController(hotelService);

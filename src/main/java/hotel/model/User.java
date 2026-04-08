@@ -1,9 +1,6 @@
 package hotel.model;
 
-/**
- * User class representing a system user with login credentials.
- * Extends abstract Person class.
- */
+
 public class User extends Person {
     private static final long serialVersionUID = 3L;
 

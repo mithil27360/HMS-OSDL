@@ -38,7 +38,7 @@ public class BookingController {
     private Label bookingStatus;
     private Label pricePreview;
 
-    private ComboBox<Booking> checkoutRoomCombo;  // Changed to ComboBox<Booking> to support multiple bookings per room
+    private ComboBox<Booking> checkoutRoomCombo;  
     private TextArea billOutput;
     private TableView<Booking> bookingTable;
 
@@ -70,7 +70,7 @@ public class BookingController {
             HBox.setHgrow(checkoutPanel, Priority.ALWAYS);
             formsRow.getChildren().addAll(bookPanel, checkoutPanel);
         } else {
-            // Guest mode: Give more space to the booking form or just show it alone
+            
             HBox.setHgrow(bookPanel, Priority.ALWAYS);
             bookPanel.setMaxWidth(Double.MAX_VALUE);
             formsRow.getChildren().add(bookPanel);
@@ -135,7 +135,7 @@ public class BookingController {
         });
         checkInPicker.setMaxWidth(Double.MAX_VALUE);
         
-        // Auto-fill identity for logged-in guests
+        
         if (currentUser != null && currentUser.isGuest()) {
             guestNameField.setText(currentUser.getFullName());
             guestNameField.setEditable(false);
@@ -284,7 +284,7 @@ public class BookingController {
             if (r == null) return new SimpleStringProperty("-");
             long days = ChronoUnit.DAYS.between(b.getCheckIn(), b.getCheckOut());
             if (days <= 0) days = 1;
-            // CRITICAL FIX: Use centralized BillingUtils instead of hardcoded 1.298
+            
             double est = r.getPricePerNight() * days * BillingUtils.getTotalMultiplier();
             return new SimpleStringProperty("₹" + String.format("%.0f", est));
         });
@@ -293,15 +293,15 @@ public class BookingController {
         table.getColumns().addAll(colNum, colType, colGuest, colContact, colDates, colTotal);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
 
-        // Cancellation Context Menu
+        
         ContextMenu menu = new ContextMenu();
         MenuItem cancelItem = new MenuItem("Cancel Reservation");
         cancelItem.setStyle("-fx-text-fill: #e74c3c; -fx-font-weight: bold;");
         cancelItem.setOnAction(e -> {
             Booking selected = table.getSelectionModel().getSelectedItem();
             if (selected != null) {
-                // Ensure guests only cancel their OWN bookings
-                // CRITICAL FIX: Check both guestName AND bookedByUsername
+                
+                
                 if (currentUser.isGuest()) {
                     boolean nameMatches = selected.getGuestName().equalsIgnoreCase(currentUser.getFullName());
                     boolean bookedByMatches = selected.getBookedByUsername() != null && 
@@ -332,93 +332,93 @@ public class BookingController {
     }
 
     private void handleBookRoom() {
-        // CRITICAL FIX: Clear status message at start of new booking attempt, not on every refresh
+        
         bookingStatus.setText("");
         
-        // Step 1: Check roomCombo.getValue() != null
+        
         Integer roomNum = roomCombo.getValue();
         if (roomNum == null) {
             setBookStatus("Please select a room", false);
             return;
         }
 
-        // Step 2: Check guestNameField not empty
+        
         String name = guestNameField.getText().trim();
         if (name.isEmpty()) {
             setBookStatus("Guest name is required", false);
             return;
         }
 
-        // Step 3: Validate name via Utility
+        
         if (!ValidationUtils.isValidName(name)) {
             setBookStatus("Name must be 2-50 letters only", false);
             return;
         }
 
-        // Step 4: Check contact not empty
+        
         String contact = contactField.getText().trim();
         if (contact.isEmpty()) {
             setBookStatus("Contact number is required", false);
             return;
         }
 
-        // Step 5: Validate contact via Utility
+        
         if (!ValidationUtils.isValidPhone(contact)) {
             setBookStatus("Contact must be exactly 10 digits", false);
             return;
         }
 
-        // Step 6: Check checkInPicker.getValue() != null
+        
         LocalDate checkIn = checkInPicker.getValue();
         if (checkIn == null) {
             setBookStatus("Select a check-in date", false);
             return;
         }
 
-        // Step 7: Check checkOutPicker.getValue() != null
+        
         LocalDate checkOut = checkOutPicker.getValue();
         if (checkOut == null) {
             setBookStatus("Select a check-out date", false);
             return;
         }
 
-        // Step 8: Check checkIn is not before LocalDate.now()
+        
         if (checkIn.isBefore(LocalDate.now())) {
             setBookStatus("Check-in cannot be in the past", false);
             return;
         }
 
-        // Step 9: Check checkOut.isAfter(checkIn)
+        
         if (!checkOut.isAfter(checkIn)) {
             setBookStatus("Check-out must be after check-in", false);
             return;
         }
 
-        // Step 10: Calculate days = ChronoUnit.DAYS.between(checkIn, checkOut). Check days >= 1
+        
         long days = ChronoUnit.DAYS.between(checkIn, checkOut);
         if (days < 1) {
             setBookStatus("Minimum stay is 1 night", false);
             return;
         }
 
-        // Step 11: Check days <= 365
+        
         if (days > 365) {
             setBookStatus("Booking cannot exceed 365 nights", false);
             return;
         }
 
-        // Step 12: Check hotelService.isRoomAvailableForDates(roomNum, checkIn, checkOut)
+        
         if (!hotelService.isRoomAvailableForDates(roomNum, checkIn, checkOut)) {
             setBookStatus("Room " + roomNum + " is currently occupied. Please select another room.", false);
             return;
         }
 
-        // Step 13: Call hotelService.bookRoom(...)
+        
         try {
             String bookedByUsername = currentUser != null ? currentUser.getUsername() : "system";
             hotelService.bookRoom(roomNum, name, contact, (int)days, checkIn, checkOut, bookedByUsername);
             
-            // Show success popup with details
+            
             Alert alert = new Alert(Alert.AlertType.INFORMATION);
             alert.setTitle("Booking Confirmed");
             alert.setHeaderText("Room " + roomNum + " successfully reserved!");
@@ -456,7 +456,7 @@ public class BookingController {
     }
 
     private void clearFields() {
-        // Keep guest identity prefilled and read-only after successful booking.
+        
         if (currentUser != null && currentUser.isGuest()) {
             guestNameField.setText(currentUser.getFullName());
             contactField.setText(currentUser.getPhone() != null ? currentUser.getPhone() : "");
@@ -469,27 +469,27 @@ public class BookingController {
     }
 
     private void handleCheckout() {
-        // Step 1: Check checkoutRoomCombo.getValue() != null
+        
         Booking booking = checkoutRoomCombo.getValue();
         if (booking == null) {
             billOutput.setText("Select an occupied room to checkout");
             return;
         }
 
-        // Prevent checkout before the guest has checked in.
+        
         if (LocalDate.now().isBefore(booking.getCheckIn())) {
             billOutput.setText("Cannot checkout an upcoming reservation before check-in date.");
             return;
         }
 
-        // Step 2: Call hotelService.checkoutBooking(bookingId) - CRITICAL FIX: use booking ID not room number
+        
         Bill bill = hotelService.checkoutBooking(booking.getBookingId());
         if (bill == null) {
             billOutput.setText("Checkout failed. Try again.");
             return;
         }
 
-        // Step 3: Call refresh() after successful checkout
+        
         billOutput.setText(bill.generateBillText());
         refresh();
     }
@@ -505,7 +505,7 @@ public class BookingController {
             
             if (end.isAfter(start)) {
                 long days = ChronoUnit.DAYS.between(start, end);
-                // CRITICAL FIX: Use centralized BillingUtils instead of hardcoded 1.298
+                
                 double total = room.getPricePerNight() * days * BillingUtils.getTotalMultiplier();
                 pricePreview.setText(String.format("₹%.0f/night × %d nights ≈ ₹%.0f (incl. taxes)", 
                     room.getPricePerNight(), days, total));
@@ -535,11 +535,11 @@ public class BookingController {
         roomCombo.setItems(FXCollections.observableArrayList(avail));
         
         if (currentUser != null && (currentUser.isAdmin() || currentUser.isReceptionist())) {
-            // CRITICAL FIX: Populate checkout combo with Booking objects instead of room numbers
-            // This prevents issues where multiple bookings for same room get collapsed into one entry
+            
+            
             java.util.List<Booking> bookedBookings = hotelService.getAllBookings().stream()
                     .filter(b -> !b.isCheckedOut())
-                    // Show all active reservations so users can find what they just booked.
+                    
                     .sorted((b1, b2) -> Integer.compare(b1.getRoomNumber(), b2.getRoomNumber()))
                     .collect(Collectors.toList());
             checkoutRoomCombo.setItems(FXCollections.observableArrayList(bookedBookings));
@@ -550,17 +550,17 @@ public class BookingController {
                 .filter(b -> {
                     if (currentUser == null) return false;
                     if (currentUser.isGuest()) {
-                        // CRITICAL FIX: Guest only sees their own bookings by name OR by bookedByUsername
+                        
                         String bName = b.getGuestName().toLowerCase().trim();
                         String uName = currentUser.getFullName().toLowerCase().trim();
                         String bookedBy = b.getBookedByUsername() != null ? b.getBookedByUsername().toLowerCase().trim() : "";
                         String currentUsername = currentUser.getUsername().toLowerCase().trim();
                         
-                        // Show booking if: name matches (with flexibility) OR booked by current user OR booked by current username
+                        
                         return (bName.contains(uName) || uName.contains(bName)) || 
                                bookedBy.equals(currentUsername);
                     }
-                    return true; // Staff see all
+                    return true; 
                 })
                 .collect(Collectors.toList());
         bookingTable.setItems(FXCollections.observableArrayList(active));

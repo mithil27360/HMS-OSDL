@@ -12,9 +12,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/**
- * Professional implementation of user authentication and management service.
- */
+
 public class AuthService implements IAuthService {
 
     private final String USERS_FILE = FileStorage.getUsersFile();
@@ -137,7 +135,7 @@ public class AuthService implements IAuthService {
 
     @Override
     public List<User> getUsersByRole(User.Role role) {
-        // Filter by role
+        
 
         return users.stream()
                 .filter(u -> u.getRole() == role)

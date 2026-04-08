@@ -139,7 +139,7 @@ public class LogController {
             String log = hotelService.getActivityLog();
             logArea.setText(log.isEmpty() ? "(No activity yet)" : log);
             
-            // Ensure auto-scroll to bottom
+            
             javafx.application.Platform.runLater(() -> {
                 logArea.selectPositionCaret(logArea.getLength());
                 logArea.deselect();
@@ -178,7 +178,7 @@ public class LogController {
                 bookLogArea.setText("No active session audit trail.");
             } else {
                 StringBuilder sb = new StringBuilder();
-                // CRITICAL FIX: Show only active bookings (not checked out) for audit trail
+                
                 log.stream()
                    .filter(b -> !b.isCheckedOut())
                    .forEach(b -> sb.append("[AUDIT] Room ").append(b.getRoomNumber())

@@ -26,9 +26,7 @@ public class BillingController {
     private Label countLabel;
     private Label avgLabel;
 
-    /**
-     * Helper model to unify Bills and Bookings for the UI ledger.
-     */
+    
     public static class RevenueRecord {
         private final String id;
         private final String guest;
@@ -36,7 +34,7 @@ public class BillingController {
         private final String type;
         private final double amount;
         private final String date;
-        private final String status; // "PAID" or "BOOKED"
+        private final String status; 
         private final Object originalObject;
 
         public RevenueRecord(String id, String guest, int room, String type, double amount, String date, String status, Object original) {
@@ -223,7 +221,7 @@ public class BillingController {
     public void refresh() {
         List<RevenueRecord> combined = new ArrayList<>();
         
-        // 1. Add PAID Bills
+        
         List<Bill> finalBills = hotelService.getAllBills();
         for (Bill b : finalBills) {
             combined.add(new RevenueRecord(
@@ -238,7 +236,7 @@ public class BillingController {
             ));
         }
 
-        // 2. Add PENDING Bookings
+        
         List<Booking> bookings = hotelService.getAllBookings();
         for (Booking b : bookings) {
             if (!b.isCheckedOut()) {
@@ -262,7 +260,7 @@ public class BillingController {
 
         revenueTable.setItems(FXCollections.observableArrayList(combined));
 
-        // 3. Sync stats with the Single Source of Truth
+        
         double total = hotelService.getTotalRevenue();
         int entries = combined.size();
         double avg = entries > 0 ? total / entries : 0.0;

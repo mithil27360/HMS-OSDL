@@ -1,8 +1,6 @@
 package hotel.util;
 
-/**
- * Generic Pair class to hold two values of different types.
- */
+
 public class Pair<T, U> {
     private T first;
     private U second;

@@ -17,9 +17,7 @@ import javafx.scene.text.TextAlignment;
 import javafx.util.Duration;
 import java.util.stream.Stream;
 
-/**
- * Controller for the Login screen.
- */
+
 public class LoginController {
 
     private final Runnable onLoginSuccess;
@@ -229,7 +227,7 @@ public class LoginController {
             if (authService.addUser(newUser)) {
                 showSignUpStatus("Account created! Logging in...", true);
                 
-                // Automatic login
+                
                 authService.login(user, pass);
                 PauseTransition pause = new PauseTransition(Duration.millis(800));
                 pause.setOnFinished(e -> onLoginSuccess.run());

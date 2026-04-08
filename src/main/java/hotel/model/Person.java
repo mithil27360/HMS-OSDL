@@ -2,9 +2,7 @@ package hotel.model;
 
 import java.io.Serializable;
 
-/**
- * Abstract class representing a person in the system.
- */
+
 public abstract class Person implements Serializable {
     private static final long serialVersionUID = 1L;
 
@@ -20,7 +18,7 @@ public abstract class Person implements Serializable {
         this.phone = phone;
     }
 
-    // Abstract method to be implemented by subclasses
+    
     public abstract String getRoleDescription();
 
     public String getFullName() { return fullName; }
