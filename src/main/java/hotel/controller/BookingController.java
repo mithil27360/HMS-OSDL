@@ -160,6 +160,7 @@ public class BookingController {
                 updateCheckOutPickerCellFactory(checkIn);
             }
             updatePricePreview();
+            refresh();
         });
 
         checkOutPicker = new DatePicker(LocalDate.now().plusDays(1));
@@ -167,6 +168,7 @@ public class BookingController {
         checkOutPicker.setMaxWidth(Double.MAX_VALUE);
         checkOutPicker.setOnAction(e -> {
             updatePricePreview();
+            refresh();
         });
 
         pricePreview = new Label("Select a room to see pricing");
