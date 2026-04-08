@@ -9,6 +9,7 @@ import hotel.model.Room;
 import hotel.model.Booking;
 import hotel.model.User;
 import hotel.util.ValidationUtils;
+import hotel.util.BillingUtils;
 import javafx.util.StringConverter;
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
@@ -37,8 +38,7 @@ public class BookingController {
     private Label bookingStatus;
     private Label pricePreview;
 
-    private ComboBox<Integer> checkoutRoomCombo;  // Now stores booking IDs instead of room numbers
-    private java.util.Map<Integer, hotel.model.Booking> bookingMap;  // Maps combo values (booking IDs) to Booking objects
+    private ComboBox<Booking> checkoutRoomCombo;  // Changed to ComboBox<Booking> to support multiple bookings per room
     private TextArea billOutput;
     private TableView<Booking> bookingTable;
 
@@ -46,7 +46,6 @@ public class BookingController {
         this.hotelService = hotelService;
         this.authService = AuthService.getInstance();
         this.currentUser = authService.getCurrentUser();
-        this.bookingMap = new java.util.HashMap<>();
         buildView();
     }
 
@@ -212,18 +211,17 @@ public class BookingController {
         checkoutRoomCombo.setMaxWidth(Double.MAX_VALUE);
         checkoutRoomCombo.setConverter(new StringConverter<>() {
             @Override
-            public String toString(Integer bookingId) {
-                if (bookingId == null) return "";
-                Booking b = bookingMap.get(bookingId);
-                if (b == null) return "Booking #" + bookingId;
-                Room r = hotelService.getRoomByNumber(b.getRoomNumber());
+            public String toString(Booking booking) {
+                if (booking == null) return "";
+                Room r = hotelService.getRoomByNumber(booking.getRoomNumber());
                 String roomInfo = r != null ? " - " + r.getRoomType().getDisplayName() : "";
-                return String.format("Room %d%s | Guest: %s | Booking #%d", 
-                    b.getRoomNumber(), roomInfo, b.getGuestName(), bookingId);
+                return String.format("Room %d%s | %s (%s→%s)", 
+                    booking.getRoomNumber(), roomInfo, booking.getGuestName(),
+                    booking.getCheckIn(), booking.getCheckOut());
             }
 
             @Override
-            public Integer fromString(String string) { return null; }
+            public Booking fromString(String string) { return null; }
         });
 
         Button checkoutBtn = new Button("Process Checkout");
@@ -285,7 +283,8 @@ public class BookingController {
             if (r == null) return new SimpleStringProperty("-");
             long days = ChronoUnit.DAYS.between(b.getCheckIn(), b.getCheckOut());
             if (days <= 0) days = 1;
-            double est = r.getPricePerNight() * days * 1.298; 
+            // CRITICAL FIX: Use centralized BillingUtils instead of hardcoded 1.298
+            double est = r.getPricePerNight() * days * BillingUtils.getTotalMultiplier();
             return new SimpleStringProperty("₹" + String.format("%.0f", est));
         });
         colTotal.setPrefWidth(100);
@@ -301,9 +300,16 @@ public class BookingController {
             Booking selected = table.getSelectionModel().getSelectedItem();
             if (selected != null) {
                 // Ensure guests only cancel their OWN bookings
-                if (currentUser.isGuest() && !selected.getGuestName().equalsIgnoreCase(currentUser.getFullName())) {
-                    setBookStatus("You can only cancel your own bookings.", false);
-                    return;
+                // CRITICAL FIX: Check both guestName AND bookedByUsername
+                if (currentUser.isGuest()) {
+                    boolean nameMatches = selected.getGuestName().equalsIgnoreCase(currentUser.getFullName());
+                    boolean bookedByMatches = selected.getBookedByUsername() != null && 
+                                            selected.getBookedByUsername().equalsIgnoreCase(currentUser.getUsername());
+                    
+                    if (!nameMatches && !bookedByMatches) {
+                        setBookStatus("You can only cancel your own bookings.", false);
+                        return;
+                    }
                 }
 
                 Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
@@ -454,27 +460,20 @@ public class BookingController {
 
     private void handleCheckout() {
         // Step 1: Check checkoutRoomCombo.getValue() != null
-        Integer bookingId = checkoutRoomCombo.getValue();
-        if (bookingId == null) {
+        Booking booking = checkoutRoomCombo.getValue();
+        if (booking == null) {
             billOutput.setText("Select an occupied room to checkout");
             return;
         }
 
-        // Step 2: Get booking from map
-        Booking booking = bookingMap.get(bookingId);
-        if (booking == null) {
-            billOutput.setText("Selected booking no longer exists");
-            return;
-        }
-
-        // Step 3: Call hotelService.checkoutBooking(bookingId) - CRITICAL FIX: use booking ID not room number
-        Bill bill = hotelService.checkoutBooking(bookingId);
+        // Step 2: Call hotelService.checkoutBooking(bookingId) - CRITICAL FIX: use booking ID not room number
+        Bill bill = hotelService.checkoutBooking(booking.getBookingId());
         if (bill == null) {
             billOutput.setText("Checkout failed. Try again.");
             return;
         }
 
-        // Step 4: Call refresh() after successful checkout
+        // Step 3: Call refresh() after successful checkout
         billOutput.setText(bill.generateBillText());
         refresh();
     }
@@ -490,7 +489,8 @@ public class BookingController {
             
             if (end.isAfter(start)) {
                 long days = ChronoUnit.DAYS.between(start, end);
-                double total = room.getPricePerNight() * days * 1.298;
+                // CRITICAL FIX: Use centralized BillingUtils instead of hardcoded 1.298
+                double total = room.getPricePerNight() * days * BillingUtils.getTotalMultiplier();
                 pricePreview.setText(String.format("₹%.0f/night × %d nights ≈ ₹%.0f (incl. taxes)", 
                     room.getPricePerNight(), days, total));
                 pricePreview.setStyle("-fx-text-fill: #3498db; -fx-font-size: 11px;");
@@ -519,24 +519,19 @@ public class BookingController {
         roomCombo.setItems(FXCollections.observableArrayList(avail));
         
         if (currentUser != null && (currentUser.isAdmin() || currentUser.isReceptionist())) {
-            // CRITICAL FIX: Populate checkout combo with booking IDs instead of room numbers
+            // CRITICAL FIX: Populate checkout combo with Booking objects instead of room numbers
             // This prevents issues where multiple bookings for same room get collapsed into one entry
-            bookingMap.clear();
-            java.util.List<Integer> bookedBookingIds = hotelService.getAllBookings().stream()
+            java.util.List<Booking> bookedBookings = hotelService.getAllBookings().stream()
                     .filter(b -> !b.isCheckedOut())
                     .filter(b -> {
-                        // Check if booking should be visible today (checkin date passed, checkout in future)
+                        // Check if booking should be visible for checkout (checkin date passed, checkout in future)
                         LocalDate today = LocalDate.now();
                         return (today.isEqual(b.getCheckIn()) || today.isAfter(b.getCheckIn())) &&
                                (today.isBefore(b.getCheckOut()) || today.isEqual(b.getCheckOut()));
                     })
-                    .map(b -> {
-                        bookingMap.put(b.getBookingId(), b);
-                        return b.getBookingId();
-                    })
-                    .sorted()
+                    .sorted((b1, b2) -> Integer.compare(b1.getRoomNumber(), b2.getRoomNumber()))
                     .collect(Collectors.toList());
-            checkoutRoomCombo.setItems(FXCollections.observableArrayList(bookedBookingIds));
+            checkoutRoomCombo.setItems(FXCollections.observableArrayList(bookedBookings));
         }
 
         java.util.List<Booking> active = hotelService.getAllBookings().stream()

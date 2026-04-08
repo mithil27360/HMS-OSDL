@@ -20,6 +20,11 @@ public interface IHotelService {
     
     boolean isRoomAvailableForDates(int roomNumber, java.time.LocalDate checkIn, java.time.LocalDate checkOut);
 
+    /**
+     * Check if a room is occupied today (critical for accurate occupancy metrics).
+     */
+    boolean isOccupiedToday(int roomNumber);
+
     Bill checkoutRoom(int roomNumber);
 
     /**

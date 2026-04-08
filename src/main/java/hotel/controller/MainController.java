@@ -29,6 +29,7 @@ public class MainController {
     private VBox sidebar;
     private StackPane contentArea;
     private Map<String, Button> navButtons = new HashMap<>();
+    private Map<String, Node> controllerCache = new HashMap<>();  // Cache controller views to preserve state
     private String activeNav = "";
 
     public MainController(Runnable onLogout) {
@@ -140,17 +141,46 @@ public class MainController {
             navButtons.get(target).getStyleClass().add("nav-btn-active");
         }
 
-        // Lazy load content
-        Node content;
-        switch (target) {
-            case "Dashboard": content = new DashboardController(hotelService).getView(); break;
-            case "Bookings":
-            case "My Bookings": content = new BookingController(hotelService, this).getView(); break;
-            case "Rooms": content = new RoomController(hotelService).getView(); break;
-            case "Staff": content = new StaffController(authService).getView(); break;
-            case "Revenue": content = new BillingController(hotelService).getView(); break;
-            case "System Logs": content = new LogController(hotelService).getView(); break;
-            default: content = new Label("Coming soon...");
+        // CRITICAL FIX: Cache controller views to preserve state and avoid recreating on every navigation
+        Node content = controllerCache.get(target);
+        
+        if (content == null) {
+            // Create controller only if not cached
+            switch (target) {
+                case "Dashboard":
+                    DashboardController dashCtrl = new DashboardController(hotelService);
+                    content = dashCtrl.getView();
+                    controllerCache.put(target, content);
+                    break;
+                case "Bookings":
+                case "My Bookings":
+                    BookingController bookCtrl = new BookingController(hotelService, this);
+                    content = bookCtrl.getView();
+                    controllerCache.put(target, content);
+                    break;
+                case "Rooms":
+                    RoomController roomCtrl = new RoomController(hotelService);
+                    content = roomCtrl.getView();
+                    controllerCache.put(target, content);
+                    break;
+                case "Staff":
+                    StaffController staffCtrl = new StaffController(authService);
+                    content = staffCtrl.getView();
+                    controllerCache.put(target, content);
+                    break;
+                case "Revenue":
+                    BillingController billCtrl = new BillingController(hotelService);
+                    content = billCtrl.getView();
+                    controllerCache.put(target, content);
+                    break;
+                case "System Logs":
+                    LogController logCtrl = new LogController(hotelService);
+                    content = logCtrl.getView();
+                    controllerCache.put(target, content);
+                    break;
+                default:
+                    content = new Label("Coming soon...");
+            }
         }
 
         contentArea.getChildren().setAll(content);

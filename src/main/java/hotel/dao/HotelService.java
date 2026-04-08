@@ -6,6 +6,7 @@ import hotel.model.Room;
 import hotel.model.Booking;
 import hotel.util.Pair;
 import hotel.util.RoomServiceThread;
+import hotel.util.BillingUtils;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -161,6 +162,22 @@ public class HotelService implements IHotelService {
             }
 
             return true;
+        }
+    }
+
+    /**
+     * CRITICAL FIX: Helper method to check if a room is occupied TODAY specifically.
+     * Returns true if any active booking has checkIn ≤ today < checkOut.
+     * Used for accurate occupancy rate and "occupied now" display.
+     */
+    @Override
+    public boolean isOccupiedToday(int roomNumber) {
+        java.time.LocalDate today = java.time.LocalDate.now();
+        synchronized (bookings) {
+            return bookings.stream()
+                .filter(b -> b.getRoomNumber() == roomNumber && !b.isCheckedOut())
+                .anyMatch(b -> (today.isEqual(b.getCheckIn()) || today.isAfter(b.getCheckIn())) && 
+                               (today.isBefore(b.getCheckOut()) || today.isEqual(b.getCheckOut())));
         }
     }
 
@@ -326,7 +343,8 @@ public class HotelService implements IHotelService {
                     if (r == null) return 0.0;
                     long days = java.time.temporal.ChronoUnit.DAYS.between(b.getCheckIn(), b.getCheckOut());
                     if (days <= 0) days = 1;
-                    return r.getPricePerNight() * days * 1.298; // Sync with BookingController multiplier
+                    // Use centralized BillingUtils instead of hardcoded 1.298
+                    return r.getPricePerNight() * days * BillingUtils.getTotalMultiplier();
                 })
                 .sum();
         }
@@ -388,6 +406,8 @@ public class HotelService implements IHotelService {
         FileStorage.saveBookings(bookings);
         bookingLogQueue.clear();
         billCounter.set(1);
+        // CRITICAL FIX: Also reset bookingCounter alongside billCounter
+        bookingCounter.set(1);
         saveData();
         FileStorage.writeLog("System hard reset performed.");
     }

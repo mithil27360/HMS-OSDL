@@ -203,7 +203,8 @@ public class StaffController {
             setStatus("Invalid email format (e.g. user@domain.com).", false);
             return;
         }
-        if (!ValidationUtils.isValidPhone(phone)) {
+        // CRITICAL FIX: Make phone optional for staff (like in LoginController signup)
+        if (!phone.isEmpty() && !ValidationUtils.isValidPhone(phone)) {
             setStatus("Phone must be exactly 10 digits.", false);
             return;
         }

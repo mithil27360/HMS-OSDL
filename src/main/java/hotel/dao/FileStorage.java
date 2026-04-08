@@ -58,6 +58,7 @@ public class FileStorage {
             ROOMS_FILE = DATA_DIR + "rooms.dat";
             BILLS_FILE = DATA_DIR + "bills.dat";
             USERS_FILE = DATA_DIR + "users.dat";
+            BOOKINGS_FILE = DATA_DIR + "bookings.dat";
             LOG_FILE = DATA_DIR + "activity.log";
             MAX_LOG_LINES = 10000;
         }
