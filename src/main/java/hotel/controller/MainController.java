@@ -9,6 +9,11 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.layout.*;
 
+/**
+ * Main Controller
+ * Orchestrates navigation and view management using a sidebar-driven BorderPane.
+ * Features: Null-safe user handling, Singleton service integration.
+ */
 public class MainController {
 
     private final HotelService hotelService;
@@ -29,7 +34,8 @@ public class MainController {
 
     public MainController(Runnable onLogout) {
         this.onLogout = onLogout;
-        this.hotelService = new HotelService();
+        // Fix: Use Singleton instances to prevent duplicate seeding and state loss
+        this.hotelService = HotelService.getInstance();
         this.authService  = AuthService.getInstance();
         buildLayout();
     }
@@ -74,6 +80,7 @@ public class MainController {
         navBtns.getStyleClass().add("sidebar-btn-container");
 
         User user = authService.getCurrentUser();
+        if (user == null) return sidebar; // Null safety
 
         Button btnDash = navButton("Dashboard");
         btnDash.setOnAction(e -> { setActive(btnDash); showDashboard(); });
@@ -170,7 +177,9 @@ public class MainController {
     public void showStaff()     { staffController.refresh();     setContent(staffController.getView()); }
     public void showLog()       { logController.refresh();       setContent(logController.getView()); }
 
-    private void setContent(javafx.scene.Node node) { contentPane.getChildren().setAll(node); }
+    private void setContent(javafx.scene.Node node) { 
+        if (node != null) contentPane.getChildren().setAll(node); 
+    }
     public BorderPane getRootLayout() { return rootLayout; }
     public HotelService getHotelService() { return hotelService; }
 }

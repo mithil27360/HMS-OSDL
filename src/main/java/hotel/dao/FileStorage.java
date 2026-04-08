@@ -4,149 +4,123 @@ import hotel.model.Bill;
 import hotel.model.Room;
 
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * File-based persistence using Serialization/Deserialization (Week 6).
- * Permanent storage of data in files (Rubric requirement).
+ * File-based persistence using modern Java NIO and Buffered I/O.
+ * Data is stored in the user's home directory for portability and security.
  */
 public class FileStorage {
 
-    private static final String ROOMS_FILE = "hotel_rooms.dat";
-    private static final String BILLS_FILE = "hotel_bills.dat";
+    private static final String DATA_DIR = System.getProperty("user.home") + "/HMS_Data/";
+    private static final String ROOMS_FILE = DATA_DIR + "hotel_rooms.dat";
+    private static final String BILLS_FILE = DATA_DIR + "hotel_bills.dat";
+    private static final String LOG_FILE = DATA_DIR + "hotel_activity.log";
 
-    // ─── ROOM PERSISTENCE ────────────────────────────────────────────────────
-
-    /**
-     * Serialize all rooms to file (Week 6 - Serialization)
-     */
-    public static void saveRooms(List<Room> rooms) {
-        try (FileOutputStream fos = new FileOutputStream(ROOMS_FILE);
-             ObjectOutputStream oos = new ObjectOutputStream(fos)) {
-            oos.writeObject(rooms);
-            System.out.println("Rooms serialized successfully.");
+    static {
+        try {
+            Files.createDirectories(Paths.get(DATA_DIR));
         } catch (IOException e) {
-            System.out.println("Serialization error: " + e.getMessage());
+            System.err.println("Could not create data directory: " + e.getMessage());
         }
     }
 
-    /**
-     * Deserialize rooms from file (Week 6 - Deserialization)
-     */
+    // ─── ROOM PERSISTENCE ────────────────────────────────────────────────────
+    public static void saveRooms(List<Room> rooms) {
+        try (ObjectOutputStream oos = new ObjectOutputStream(
+                new BufferedOutputStream(new FileOutputStream(ROOMS_FILE)))) {
+            oos.writeObject(rooms);
+        } catch (IOException e) {
+            System.err.println("Serialization error: " + e.getMessage());
+        }
+    }
+
     @SuppressWarnings("unchecked")
     public static List<Room> loadRooms() {
-        File file = new File(ROOMS_FILE);
-        if (!file.exists()) return new ArrayList<>();
-
-        try (FileInputStream fis = new FileInputStream(ROOMS_FILE);
-             ObjectInputStream ois = new ObjectInputStream(fis)) {
-            List<Room> rooms = (List<Room>) ois.readObject();
-            System.out.println("Rooms deserialized successfully.");
-            return rooms;
+        if (!Files.exists(Paths.get(ROOMS_FILE))) return new ArrayList<>();
+        try (ObjectInputStream ois = new ObjectInputStream(
+                new BufferedInputStream(new FileInputStream(ROOMS_FILE)))) {
+            return (List<Room>) ois.readObject();
         } catch (IOException | ClassNotFoundException e) {
-            System.out.println("Deserialization error: " + e.getMessage());
+            System.err.println("Deserialization error: " + e.getMessage());
             return new ArrayList<>();
         }
     }
 
     // ─── BILL PERSISTENCE ────────────────────────────────────────────────────
-
-    /**
-     * Serialize bill to file (Week 6 - Serialization)
-     */
-    @SuppressWarnings("unchecked")
     public static void saveBill(Bill bill) {
         List<Bill> bills = loadBills();
         bills.add(bill);
-        try (FileOutputStream fos = new FileOutputStream(BILLS_FILE);
-             ObjectOutputStream oos = new ObjectOutputStream(fos)) {
+        try (ObjectOutputStream oos = new ObjectOutputStream(
+                new BufferedOutputStream(new FileOutputStream(BILLS_FILE)))) {
             oos.writeObject(bills);
         } catch (IOException e) {
-            System.out.println("Bill save error: " + e.getMessage());
+            System.err.println("Bill save error: " + e.getMessage());
         }
     }
 
-    /**
-     * Deserialize all bills from file
-     */
     @SuppressWarnings("unchecked")
     public static List<Bill> loadBills() {
-        File file = new File(BILLS_FILE);
-        if (!file.exists()) return new ArrayList<>();
-
-        try (FileInputStream fis = new FileInputStream(BILLS_FILE);
-             ObjectInputStream ois = new ObjectInputStream(fis)) {
+        if (!Files.exists(Paths.get(BILLS_FILE))) return new ArrayList<>();
+        try (ObjectInputStream ois = new ObjectInputStream(
+                new BufferedInputStream(new FileInputStream(BILLS_FILE)))) {
             return (List<Bill>) ois.readObject();
         } catch (IOException | ClassNotFoundException e) {
             return new ArrayList<>();
         }
     }
 
-    // ─── TEXT LOG (FileWriter / FileReader - Week 5) ─────────────────────────
-
-    /**
-     * Write activity log using FileWriter (Week 5 - Character Streams)
-     */
+    // ─── TEXT LOG ────────────────────────────────────────────────────────────
     public static void writeLog(String message) {
-        try (FileWriter fw = new FileWriter("hotel_activity.log", true)) {
-            fw.write("[LOG] " + message + "\n");
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter(LOG_FILE, true))) {
+            bw.write(String.format("[%tF %<tT] %s%n", System.currentTimeMillis(), message));
         } catch (IOException e) {
-            System.out.println("Log write error: " + e.getMessage());
+            System.err.println("Log write error: " + e.getMessage());
         }
     }
 
-    /**
-     * Read activity log using FileReader (Week 5 - Character Streams)
-     */
     public static String readLog() {
-        StringBuilder sb = new StringBuilder();
-        File file = new File("hotel_activity.log");
-        if (!file.exists()) return "No activity log found.";
-
-        try (FileReader fr = new FileReader("hotel_activity.log")) {
-            int ch;
-            while ((ch = fr.read()) != -1) {
-                sb.append((char) ch);
-            }
+        if (!Files.exists(Paths.get(LOG_FILE))) return "No activity log found.";
+        try {
+            return Files.readString(Paths.get(LOG_FILE));
         } catch (IOException e) {
             return "Error reading log: " + e.getMessage();
         }
-        return sb.toString();
     }
 
     /**
-     * Copy log using byte streams (Week 5 - Byte Streams)
+     * Copy log using modern transferTo for high performance.
      */
     public static void copyLogToBackup() {
-        try (FileInputStream fis = new FileInputStream("hotel_activity.log");
-             FileOutputStream fos = new FileOutputStream("hotel_activity_backup.log")) {
-            int data;
-            while ((data = fis.read()) != -1) {
-                fos.write(data);
-            }
-            System.out.println("Log backed up successfully.");
+        Path source = Paths.get(LOG_FILE);
+        Path target = Paths.get(DATA_DIR + "hotel_activity_backup.log");
+        if (!Files.exists(source)) return;
+        
+        try (InputStream is = Files.newInputStream(source);
+             OutputStream os = Files.newOutputStream(target)) {
+            is.transferTo(os);
         } catch (IOException e) {
-            System.out.println("Backup error: " + e.getMessage());
+            System.err.println("Backup error: " + e.getMessage());
         }
     }
 
-    /**
-     * Delete bill file to reset earnings (Week 6)
-     */
     public static void clearBills() {
-        File file = new File(BILLS_FILE);
-        if (file.exists()) file.delete();
+        try {
+            Files.deleteIfExists(Paths.get(BILLS_FILE));
+        } catch (IOException e) {
+            System.err.println("Error clearing bills: " + e.getMessage());
+        }
     }
 
-    /**
-     * Truncate activity log (Week 5)
-     */
     public static void clearLog() {
-        try (FileWriter fw = new FileWriter("hotel_activity.log", false)) {
-            fw.write("[LOG] System statistics reset. Starting fresh.\n");
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter(LOG_FILE, false))) {
+            bw.write("[LOG] System statistics reset. Starting fresh.\n");
         } catch (IOException e) {
-            System.out.println("Log clear error: " + e.getMessage());
+            System.err.println("Log clear error: " + e.getMessage());
         }
     }
 }

@@ -8,47 +8,52 @@ import hotel.util.Pair;
 import java.util.*;
 
 /**
- * Hotel Service layer demonstrating:
- * - Collections Framework: ArrayList, HashMap, Iterator (Week 8)
- * - Synchronization (Week 4) - thread-safe booking
- * - Generics (Week 7)
- * - Wrapper classes + Autoboxing (Week 2)
+ * Hotel Service layer managing rooms, bookings, and financial logic.
+ * Features: Static Holder Singleton, Thread-safe Synchronized methods, 
+ * and robust ID generation.
  */
 public class HotelService {
 
-    // Collections Framework (Week 8)
-    private ArrayList<Room> rooms;              // ArrayList for room objects
-    private HashMap<Integer, Room> roomMap;     // HashMap: roomNumber -> Room
-    private ArrayList<Bill> bills;              // ArrayList for bills
-    private ArrayList<Pair<Integer, String>> bookingLog; // Generic Pair (Week 7)
+    private ArrayList<Room> rooms;
+    private HashMap<Integer, Room> roomMap;
+    private ArrayList<Bill> bills;
+    private ArrayList<Pair<Integer, String>> bookingLog;
 
     private int billCounter = 1;
 
-    public HotelService() {
-        // Load persisted data
+    // ─── Thread-Safe Singleton (Static Holder Pattern) ───────────────────────
+    private HotelService() {
         rooms = new ArrayList<>(FileStorage.loadRooms());
         roomMap = new HashMap<>();
         bills = new ArrayList<>(FileStorage.loadBills());
         bookingLog = new ArrayList<>();
 
-        // Rebuild HashMap from list
         for (Room r : rooms) {
             roomMap.put(r.getRoomNumber(), r);
         }
 
-        // If no data, seed default rooms
         if (rooms.isEmpty()) {
             seedDefaultRooms();
         }
 
-        // Update bill counter
-        billCounter = bills.size() + 1;
+        // Fix: Reliable Bill ID Calculation
+        billCounter = bills.stream()
+                .mapToInt(Bill::getBillId)
+                .max()
+                .orElse(0) + 1;
 
         FileStorage.writeLog("System initialized. Rooms loaded: " + rooms.size());
     }
 
-    // ─── SEED DATA ───────────────────────────────────────────────────────────
+    private static class Holder {
+        private static final HotelService INSTANCE = new HotelService();
+    }
 
+    public static HotelService getInstance() {
+        return Holder.INSTANCE;
+    }
+
+    // ─── SEED DATA ───────────────────────────────────────────────────────────
     private void seedDefaultRooms() {
         addRoom(new Room(101, Room.RoomType.STANDARD));
         addRoom(new Room(102, Room.RoomType.STANDARD));
@@ -62,12 +67,12 @@ public class HotelService {
     }
 
     // ─── ROOM MANAGEMENT ─────────────────────────────────────────────────────
-
     public synchronized void addRoom(Room room) {
         if (!roomMap.containsKey(room.getRoomNumber())) {
             rooms.add(room);
             roomMap.put(room.getRoomNumber(), room);
             FileStorage.writeLog("Room added: " + room.getRoomNumber());
+            saveData();
         }
     }
 
@@ -87,10 +92,7 @@ public class HotelService {
             room.setCheckInDate(checkIn);
             room.setCheckOutDate(checkOut);
 
-            // Autoboxing: int -> Integer (Week 2)
-            Integer roomNum = roomNumber;
-            bookingLog.add(new Pair<>(roomNum, guestName)); // Generic Pair (Week 7)
-
+            bookingLog.add(new Pair<>(roomNumber, guestName));
             FileStorage.writeLog("Room " + roomNumber + " booked by " + guestName);
             saveData();
             return true;
@@ -101,15 +103,13 @@ public class HotelService {
         Room room = roomMap.get(roomNumber);
         if (room == null || !room.isBooked()) return null;
 
-        // Wrapper class usage (Week 2)
-        Integer days = room.getDaysBooked();  // Autoboxing
-
-        // Create bill using unboxed values
+        Integer days = room.getDaysBooked();
+        
+        // Use incrementing counter based on max ID
         Bill bill = new Bill(billCounter++, room, days);
         bills.add(bill);
         FileStorage.saveBill(bill);
 
-        // Generic display (Week 7)
         GenericUtils.display("Checkout - Room " + roomNumber + " | Total: ₹" + bill.getTotalAmount());
 
         room.setBooked(false);
@@ -125,14 +125,10 @@ public class HotelService {
     }
 
     // ─── QUERIES ─────────────────────────────────────────────────────────────
-
-    public ArrayList<Room> getAllRooms() {
-        return rooms;
-    }
+    public ArrayList<Room> getAllRooms() { return rooms; }
 
     public ArrayList<Room> getAvailableRooms() {
         ArrayList<Room> available = new ArrayList<>();
-        // Iterator usage (Week 8)
         Iterator<Room> it = rooms.iterator();
         while (it.hasNext()) {
             Room r = it.next();
@@ -149,13 +145,8 @@ public class HotelService {
         return booked;
     }
 
-    public Room getRoomByNumber(int number) {
-        return roomMap.get(number);
-    }
-
-    public ArrayList<Bill> getAllBills() {
-        return bills;
-    }
+    public Room getRoomByNumber(int number) { return roomMap.get(number); }
+    public ArrayList<Bill> getAllBills() { return bills; }
 
     public ArrayList<Room> getRoomsByType(Room.RoomType type) {
         ArrayList<Room> result = new ArrayList<>();
@@ -182,7 +173,7 @@ public class HotelService {
     public int getOccupiedCount() { return getBookedRooms().size(); }
 
     public double getTotalRevenue() {
-        Double total = 0.0;
+        double total = 0.0;
         for (Bill b : bills) {
             total += b.getTotalAmount();
         }
@@ -209,7 +200,6 @@ public class HotelService {
         bills.clear();
         bookingLog.clear();
         billCounter = 1;
-        // Also reset all rooms to available
         for (Room r : rooms) {
             r.setBooked(false);
             r.setGuestName("");
@@ -222,15 +212,7 @@ public class HotelService {
         FileStorage.writeLog("System hard reset performed by administrator.");
     }
 
-    private void saveData() {
-        FileStorage.saveRooms(rooms);
-    }
-
-    public String getActivityLog() {
-        return FileStorage.readLog();
-    }
-
-    public List<Pair<Integer, String>> getBookingLog() {
-        return bookingLog;
-    }
+    private void saveData() { FileStorage.saveRooms(rooms); }
+    public String getActivityLog() { return FileStorage.readLog(); }
+    public List<Pair<Integer, String>> getBookingLog() { return bookingLog; }
 }

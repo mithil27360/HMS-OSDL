@@ -17,10 +17,7 @@ import java.time.temporal.ChronoUnit;
 
 /**
  * Booking Controller
- * - Book rooms (prevent double-booking)
- * - Checkout rooms (generate bill)
- * - Shows active bookings in TableView
- * - Triggers room service threads on booking
+ * Manages room reservations, checkouts, and data validation.
  */
 public class BookingController {
 
@@ -28,7 +25,6 @@ public class BookingController {
     private final MainController mainController;
     private VBox view;
 
-    // Book form fields
     private ComboBox<Integer> roomCombo;
     private TextField guestNameField;
     private TextField contactField;
@@ -37,11 +33,8 @@ public class BookingController {
     private Label bookingStatus;
     private Label pricePreview;
 
-    // Checkout
     private ComboBox<Integer> checkoutRoomCombo;
     private TextArea billOutput;
-
-    // Table
     private TableView<Room> bookingTable;
 
     public BookingController(HotelService hotelService, MainController mainController) {
@@ -51,16 +44,16 @@ public class BookingController {
     }
 
     private void buildView() {
-        view = new VBox(20);
+        view = new VBox(24);
         view.setPadding(new Insets(30));
         view.setStyle("-fx-background-color: #f4f4f6;");
 
         Label title = new Label("Booking & Checkout");
-        title.setStyle("-fx-text-fill: #2c3e50; -fx-font-size: 22px; -fx-font-weight: bold;");
+        title.getStyleClass().add("section-title");
+        title.setStyle("-fx-text-fill: #2c3e50; -fx-font-size: 24px; -fx-font-weight: bold;");
 
-        // Two-column layout: book form | checkout form
         HBox formsRow = new HBox(20);
-        formsRow.setMaxHeight(400);
+        formsRow.setMaxHeight(450);
 
         VBox bookPanel = buildBookingForm();
         bookPanel.setMinWidth(320);
@@ -71,9 +64,9 @@ public class BookingController {
 
         formsRow.getChildren().addAll(bookPanel, checkoutPanel);
 
-        // Active bookings table
         Label tableTitle = new Label("Active Bookings");
         tableTitle.setStyle("-fx-text-fill: #2c3e50; -fx-font-size: 16px; -fx-font-weight: bold;");
+        
         bookingTable = buildBookingTable();
         VBox.setVgrow(bookingTable, Priority.ALWAYS);
 
@@ -85,68 +78,50 @@ public class BookingController {
         VBox panel = new VBox(12);
         panel.getStyleClass().add("panel-card");
 
-        Label title = new Label("Book a Room");
+        Label title = new Label("New Reservation");
         title.setStyle("-fx-text-fill: #3498db; -fx-font-size: 15px; -fx-font-weight: bold;");
         Region div = new Region(); div.getStyleClass().add("gold-divider");
 
-        // Room selector
-        Label lblRoom = new Label("Select Room");
-        lblRoom.getStyleClass().add("field-label");
         roomCombo = new ComboBox<>();
         roomCombo.getStyleClass().add("combo-box");
         roomCombo.setMaxWidth(Double.MAX_VALUE);
         roomCombo.setOnAction(e -> updatePricePreview());
 
-        // Guest Name
-        Label lblGuest = new Label("Guest Name");
-        lblGuest.getStyleClass().add("field-label");
         guestNameField = new TextField();
-        guestNameField.setPromptText("Full name");
+        guestNameField.setPromptText("Guest Full Name");
         guestNameField.getStyleClass().add("text-field");
 
-        // Contact
-        Label lblContact = new Label("Contact Number");
-        lblContact.getStyleClass().add("field-label");
         contactField = new TextField();
-        contactField.setPromptText("e.g. 9876543210");
+        contactField.setPromptText("Contact (10 digits)");
         contactField.getStyleClass().add("text-field");
 
-        // Dates (DatePicker)
-        Label lblCheckIn = new Label("Check-in Date");
-        lblCheckIn.getStyleClass().add("field-label");
         checkInPicker = new DatePicker(LocalDate.now());
-        checkInPicker.getStyleClass().add("date-picker");
         checkInPicker.setMaxWidth(Double.MAX_VALUE);
         checkInPicker.setOnAction(e -> updatePricePreview());
 
-        Label lblCheckOut = new Label("Check-out Date");
-        lblCheckOut.getStyleClass().add("field-label");
         checkOutPicker = new DatePicker(LocalDate.now().plusDays(1));
-        checkOutPicker.getStyleClass().add("date-picker");
         checkOutPicker.setMaxWidth(Double.MAX_VALUE);
         checkOutPicker.setOnAction(e -> updatePricePreview());
 
-        // Price preview
         pricePreview = new Label("Select a room to see pricing");
-        pricePreview.setStyle("-fx-text-fill: #7f8c8d; -fx-font-size: 12px;");
+        pricePreview.setStyle("-fx-text-fill: #7f8c8d; -fx-font-size: 11px;");
 
-        // Status
         bookingStatus = new Label();
         bookingStatus.setWrapText(true);
-        bookingStatus.setStyle("-fx-font-size: 12px;");
+        bookingStatus.setStyle("-fx-font-size: 11px;");
 
-        // Book Button
-        Button bookBtn = new Button("✓ Confirm Booking");
+        Button bookBtn = new Button("✓ Complete Booking");
         bookBtn.getStyleClass().add("btn-primary");
         bookBtn.setMaxWidth(Double.MAX_VALUE);
+        bookBtn.setPrefHeight(40);
         bookBtn.setOnAction(e -> handleBookRoom());
 
-        panel.getChildren().addAll(title, div,
-            lblRoom, roomCombo,
-            lblGuest, guestNameField,
-            lblContact, contactField,
-            lblCheckIn, checkInPicker,
-            lblCheckOut, checkOutPicker,
+        panel.getChildren().addAll(title, div, 
+            new Label("Select Room"), roomCombo,
+            new Label("Guest Name"), guestNameField,
+            new Label("Contact Number"), contactField,
+            new Label("Check-in"), checkInPicker,
+            new Label("Check-out"), checkOutPicker,
             pricePreview, bookBtn, bookingStatus
         );
         return panel;
@@ -157,84 +132,91 @@ public class BookingController {
         panel.getStyleClass().add("panel-card");
         VBox.setVgrow(panel, Priority.ALWAYS);
 
-        Label title = new Label("Checkout & Generate Bill");
+        Label title = new Label("Checkout & Settlement");
         title.setStyle("-fx-text-fill: #3498db; -fx-font-size: 15px; -fx-font-weight: bold;");
         Region div = new Region(); div.getStyleClass().add("gold-divider");
 
-        Label lblRoom = new Label("Select Occupied Room");
-        lblRoom.getStyleClass().add("field-label");
         checkoutRoomCombo = new ComboBox<>();
         checkoutRoomCombo.getStyleClass().add("combo-box");
         checkoutRoomCombo.setMaxWidth(Double.MAX_VALUE);
 
-        Button checkoutBtn = new Button("⬛ Checkout & Print Bill");
+        Button checkoutBtn = new Button("⬛ Process Checkout");
         checkoutBtn.getStyleClass().add("btn-success");
         checkoutBtn.setMaxWidth(Double.MAX_VALUE);
+        checkoutBtn.setPrefHeight(40);
         checkoutBtn.setOnAction(e -> handleCheckout());
 
         billOutput = new TextArea();
         billOutput.getStyleClass().add("text-area");
         billOutput.setEditable(false);
-        billOutput.setPromptText("Bill will appear here after checkout...");
-        billOutput.setWrapText(false);
+        billOutput.setPromptText("Final invoice will be generated here...");
+        billOutput.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 12px;");
         VBox.setVgrow(billOutput, Priority.ALWAYS);
 
-        panel.getChildren().addAll(title, div, lblRoom, checkoutRoomCombo, checkoutBtn, billOutput);
+        panel.getChildren().addAll(title, div, new Label("Occupied Room"), checkoutRoomCombo, checkoutBtn, billOutput);
         return panel;
     }
 
     private TableView<Room> buildBookingTable() {
         TableView<Room> table = new TableView<>();
         table.getStyleClass().add("table-view");
-        table.setPlaceholder(new Label("No active bookings"));
-        table.setMaxHeight(200);
+        table.setPlaceholder(new Label("No active bookings found."));
+        table.setMaxHeight(300);
 
         TableColumn<Room, Integer> colNum = new TableColumn<>("Room");
         colNum.setCellValueFactory(new PropertyValueFactory<>("roomNumber"));
         colNum.setPrefWidth(80);
 
         TableColumn<Room, String> colType = new TableColumn<>("Type");
-        colType.setCellValueFactory(d ->
-            new javafx.beans.property.SimpleStringProperty(d.getValue().getRoomType().getDisplayName()));
-        colType.setPrefWidth(130);
+        colType.setCellValueFactory(d -> new javafx.beans.property.SimpleStringProperty(d.getValue().getRoomType().getDisplayName()));
+        colType.setPrefWidth(120);
 
         TableColumn<Room, String> colGuest = new TableColumn<>("Guest Name");
         colGuest.setCellValueFactory(new PropertyValueFactory<>("guestName"));
-        colGuest.setPrefWidth(160);
+        colGuest.setPrefWidth(150);
 
         TableColumn<Room, String> colContact = new TableColumn<>("Contact");
         colContact.setCellValueFactory(new PropertyValueFactory<>("guestContact"));
-        colContact.setPrefWidth(130);
+        colContact.setPrefWidth(120);
 
-        TableColumn<Room, Integer> colDays = new TableColumn<>("Days");
-        colDays.setCellValueFactory(new PropertyValueFactory<>("daysBooked"));
-        colDays.setPrefWidth(70);
+        TableColumn<Room, String> colDates = new TableColumn<>("Duration");
+        colDates.setCellValueFactory(d -> new javafx.beans.property.SimpleStringProperty(
+            d.getValue().getCheckInDate() + " to " + d.getValue().getCheckOutDate()));
+        colDates.setPrefWidth(180);
 
         TableColumn<Room, String> colTotal = new TableColumn<>("Est. Total");
         colTotal.setCellValueFactory(d -> {
             Room r = d.getValue();
-            double est = r.getPricePerNight() * r.getDaysBooked() * 1.28; // with charges
+            double est = r.getPricePerNight() * r.getDaysBooked() * 1.298; // Fix: Use correct billing multiplier
             return new javafx.beans.property.SimpleStringProperty("₹" + String.format("%.0f", est));
         });
         colTotal.setPrefWidth(100);
 
-        table.getColumns().addAll(colNum, colType, colGuest, colContact, colDays, colTotal);
+        table.getColumns().addAll(colNum, colType, colGuest, colContact, colDates, colTotal);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         return table;
     }
-
-    // ─── Event Handlers ───────────────────────────────────────────────────────
 
     private void handleBookRoom() {
         Integer roomNum = roomCombo.getValue();
         String name = guestNameField.getText().trim();
         String contact = contactField.getText().trim();
-        
         LocalDate start = checkInPicker.getValue();
         LocalDate end = checkOutPicker.getValue();
 
+        // ─── VALIDATION ───────────────────────────────────────────────────────
         if (roomNum == null || name.isEmpty() || contact.isEmpty() || start == null || end == null) {
-            setBookStatus("✗ Please fill all fields.", false);
+            setBookStatus("✗ Missing required information.", false);
+            return;
+        }
+
+        if (name.length() < 2 || !name.matches("^[a-zA-Z\\s]+$")) {
+            setBookStatus("✗ Invalid Name. Use letters (min 2).", false);
+            return;
+        }
+
+        if (!contact.matches("^\\d{10}$")) {
+            setBookStatus("✗ Invalid Contact. Use 10 digits.", false);
             return;
         }
 
@@ -244,63 +226,60 @@ public class BookingController {
         }
 
         if (!end.isAfter(start)) {
-            setBookStatus("✗ Check-out must be after check-in.", false);
+            setBookStatus("✗ Checkout must be after Check-in.", false);
             return;
         }
 
         long days = ChronoUnit.DAYS.between(start, end);
         DateTimeFormatter dtf = DateTimeFormatter.ofPattern("dd-MM-yyyy");
-        String checkInStr = start.format(dtf);
-        String checkOutStr = end.format(dtf);
-
-        boolean success = hotelService.bookRoom(roomNum, name, contact, (int)days, checkInStr, checkOutStr);
+        
+        boolean success = hotelService.bookRoom(roomNum, name, contact, (int)days, start.format(dtf), end.format(dtf));
         if (success) {
-            setBookStatus("✓ Room " + roomNum + " booked for " + name + "!", true);
-            guestNameField.clear();
-            contactField.clear();
-            checkInPicker.setValue(LocalDate.now());
-            checkOutPicker.setValue(LocalDate.now().plusDays(1));
-            // Start room service threads in background
-            new Thread(() -> RoomServiceThread.startRoomServices(roomNum), "ServiceThread-" + roomNum).start();
+            setBookStatus("✓ Room " + roomNum + " successfully reserved.", true);
+            clearFields();
+            new Thread(() -> RoomServiceThread.startRoomServices(roomNum)).start();
             refresh();
         } else {
-            setBookStatus("✗ Room " + roomNum + " is already occupied or not found.", false);
+            setBookStatus("✗ Room " + roomNum + " is currently occupied.", false);
         }
+    }
+
+    private void clearFields() {
+        guestNameField.clear();
+        contactField.clear();
+        checkInPicker.setValue(LocalDate.now());
+        checkOutPicker.setValue(LocalDate.now().plusDays(1));
     }
 
     private void handleCheckout() {
         Integer roomNum = checkoutRoomCombo.getValue();
-        if (roomNum == null) {
-            billOutput.setText("Please select a room to checkout.");
-            return;
-        }
+        if (roomNum == null) return;
+        
         Bill bill = hotelService.checkoutRoom(roomNum);
         if (bill != null) {
             billOutput.setText(bill.generateBillText());
             refresh();
-        } else {
-            billOutput.setText("Checkout failed — room not found or not booked.");
         }
     }
 
     private void updatePricePreview() {
         Integer roomNum = roomCombo.getValue();
-        if (roomNum == null || checkInPicker == null || checkOutPicker == null) return;
+        if (roomNum == null || checkInPicker.getValue() == null || checkOutPicker.getValue() == null) return;
+        
         Room room = hotelService.getRoomByNumber(roomNum);
         if (room != null) {
             LocalDate start = checkInPicker.getValue();
             LocalDate end = checkOutPicker.getValue();
             
-            if (start != null && end != null && end.isAfter(start)) {
+            if (end.isAfter(start)) {
                 long days = ChronoUnit.DAYS.between(start, end);
-                double base = room.getPricePerNight() * days;
-                double total = base * 1.28;
-                pricePreview.setText(String.format("₹%.0f/night × %d days ≈ ₹%.0f (incl. taxes)", 
+                double total = room.getPricePerNight() * days * 1.298; // Correct 1.298x multiplier
+                pricePreview.setText(String.format("₹%.0f/night × %d nights ≈ ₹%.0f (incl. taxes)", 
                     room.getPricePerNight(), days, total));
-                pricePreview.setStyle("-fx-text-fill: #3498db; -fx-font-size: 12px;");
+                pricePreview.setStyle("-fx-text-fill: #3498db; -fx-font-size: 11px;");
             } else {
-                pricePreview.setText("Please select valid dates");
-                pricePreview.setStyle("-fx-text-fill: #e74c3c; -fx-font-size: 12px;");
+                pricePreview.setText("Check-out must be after check-in");
+                pricePreview.setStyle("-fx-text-fill: #e74c3c; -fx-font-size: 11px;");
             }
         }
     }
@@ -311,19 +290,14 @@ public class BookingController {
     }
 
     public void refresh() {
-        // Populate available rooms in booking combo
         java.util.List<Integer> avail = new java.util.ArrayList<>();
         for (Room r : hotelService.getAvailableRooms()) avail.add(r.getRoomNumber());
         roomCombo.setItems(FXCollections.observableArrayList(avail));
-        if (!avail.isEmpty()) roomCombo.setValue(avail.get(0));
-
-        // Populate occupied rooms in checkout combo
+        
         java.util.List<Integer> booked = new java.util.ArrayList<>();
         for (Room r : hotelService.getBookedRooms()) booked.add(r.getRoomNumber());
         checkoutRoomCombo.setItems(FXCollections.observableArrayList(booked));
-        if (!booked.isEmpty()) checkoutRoomCombo.setValue(booked.get(0));
 
-        // Refresh table
         bookingTable.setItems(FXCollections.observableArrayList(hotelService.getBookedRooms()));
         updatePricePreview();
     }
