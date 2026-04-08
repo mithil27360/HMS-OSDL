@@ -106,7 +106,7 @@ public class LogController {
         VBox panel = new VBox(14);
         panel.getStyleClass().add("panel-card-stats");
 
-        Label t = new Label("Property Performance");
+        Label t = new Label("Overview");
         t.setStyle("-fx-text-fill: #3498db; -fx-font-size: 14px; -fx-font-weight: bold;");
         Region div = new Region(); div.getStyleClass().add("gold-divider");
 

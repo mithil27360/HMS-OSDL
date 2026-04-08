@@ -62,7 +62,7 @@ public class BillingController {
         view.setPadding(new Insets(30));
         view.setStyle("-fx-background-color: #f4f4f6;");
 
-        Label title = new Label("Unified Revenue Ledger");
+        Label title = new Label("Revenue");
         title.setStyle("-fx-text-fill: #2c3e50; -fx-font-size: 22px; -fx-font-weight: bold;");
 
         HBox statsRow = buildStatsRow();
@@ -115,7 +115,7 @@ public class BillingController {
     private VBox buildTablePanel() {
         VBox panel = new VBox(10);
 
-        Label title = new Label("Financial Timeline (Bills & Active Reservations)");
+        Label title = new Label("Revenue Timeline");
         title.setStyle("-fx-text-fill: #2c3e50; -fx-font-size: 15px; -fx-font-weight: bold;");
 
         revenueTable = new TableView<>();
@@ -204,7 +204,7 @@ public class BillingController {
         panel.getStyleClass().add("panel-card");
         VBox.setVgrow(panel, Priority.ALWAYS);
 
-        Label title = new Label("Ledger Detail");
+        Label title = new Label("Revenue Detail");
         title.setStyle("-fx-text-fill: #3498db; -fx-font-size: 15px; -fx-font-weight: bold;");
         Region div = new Region(); div.getStyleClass().add("gold-divider");
 
