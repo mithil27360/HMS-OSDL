@@ -171,9 +171,9 @@ public class RoomController {
         });
         colGuest.setPrefWidth(140);
 
-        roomTable.getColumns().setAll(colNum, colType, colPrice, colStatus, colGuest);
+        roomTable.getColumns().setAll(java.util.List.of(colNum, colType, colPrice, colStatus, colGuest));
 
-        roomTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        roomTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
 
         panel.getChildren().addAll(roomTable);
         return panel;

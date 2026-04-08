@@ -174,8 +174,8 @@ public class BillingController {
         colDate.setCellValueFactory(new PropertyValueFactory<>("date"));
         colDate.setPrefWidth(140);
 
-        revenueTable.getColumns().addAll(colStatus, colId, colGuest, colRoom, colTotal, colDate);
-        revenueTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        revenueTable.getColumns().setAll(List.of(colStatus, colId, colGuest, colRoom, colTotal, colDate));
+        revenueTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
 
         revenueTable.getSelectionModel().selectedItemProperty().addListener((obs, old, newVal) -> {
             if (newVal != null) {

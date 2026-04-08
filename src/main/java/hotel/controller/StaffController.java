@@ -174,8 +174,8 @@ public class StaffController {
             }
         });
 
-        userTable.getColumns().setAll(colRole, colName, colUser, colEmail, colStatus);
-        userTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        userTable.getColumns().setAll(java.util.List.of(colRole, colName, colUser, colEmail, colStatus));
+        userTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
 
         panel.getChildren().addAll(title, userTable);
         return panel;

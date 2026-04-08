@@ -292,8 +292,8 @@ public class BookingController {
         });
         colTotal.setPrefWidth(100);
 
-        table.getColumns().addAll(colNum, colType, colGuest, colContact, colDates, colTotal);
-        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        table.getColumns().setAll(java.util.List.of(colNum, colType, colGuest, colContact, colDates, colTotal));
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
 
         
         ContextMenu menu = new ContextMenu();

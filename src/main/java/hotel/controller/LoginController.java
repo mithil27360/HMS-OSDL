@@ -256,7 +256,7 @@ public class LoginController {
         }
 
         try {
-            User user = authService.login(username, password);
+            authService.login(username, password);
             showStatus("Welcome, logging you in...", true);
 
             PauseTransition pause = new PauseTransition(Duration.millis(300));
