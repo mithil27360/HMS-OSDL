@@ -498,8 +498,10 @@ public class BookingController {
                 .filter(b -> {
                     if (currentUser == null) return false;
                     if (currentUser.isGuest()) {
-                        // Guest only sees their own
-                        return b.getGuestName().equalsIgnoreCase(currentUser.getFullName());
+                        // Guest only sees their own - handle name variations (Mithil vs Mithil S)
+                        String bName = b.getGuestName().toLowerCase().trim();
+                        String uName = currentUser.getFullName().toLowerCase().trim();
+                        return bName.contains(uName) || uName.contains(bName);
                     }
                     return true; // Staff see all
                 })
