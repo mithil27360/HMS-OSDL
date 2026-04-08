@@ -131,12 +131,9 @@ public class BillingController {
             @Override
             protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
-                if (empty || item == null) { setText(null); setStyle(""); return; }
-                setText(item);
-                if (item.equals("PAID")) {
+                if (item.equals("PAID") || item.equals("BOOKED")) {
+                    setText("PAID");
                     setStyle("-fx-text-fill: #ffffff; -fx-background-color: #2ecc71; -fx-background-radius: 4; -fx-alignment: center; -fx-font-weight: bold; -fx-padding: 2 5 2 5;");
-                } else {
-                    setStyle("-fx-text-fill: #ffffff; -fx-background-color: #e67e22; -fx-background-radius: 4; -fx-alignment: center; -fx-font-weight: bold; -fx-padding: 2 5 2 5;");
                 }
             }
         });
@@ -180,14 +177,13 @@ public class BillingController {
                     billDetail.setText(((Bill) orig).generateBillText());
                 } else if (orig instanceof Booking) {
                     Booking b = (Booking) orig;
-                    Room r = hotelService.getRoomByNumber(b.getRoomNumber());
-                    billDetail.setText("RESERVATION PREVIEW\n" +
+                    billDetail.setText("TRANSACTION PREVIEW\n" +
                                      "--------------------\n" +
-                                     "Status: PENDING [BOOKED]\n" +
+                                     "Status: PAID [BOOKING]\n" +
                                      "Guest : " + b.getGuestName() + "\n" +
                                      "Room  : " + b.getRoomNumber() + "\n" +
                                      "Dates : " + b.getCheckIn() + " to " + b.getCheckOut() + "\n" +
-                                     "Est. Total: ₹" + String.format("%.2f", newVal.getAmount()));
+                                     "Total: ₹" + String.format("%.2f", newVal.getAmount()));
                 }
             }
         });
@@ -249,7 +245,7 @@ public class BillingController {
                     r != null ? r.getRoomType().getDisplayName() : "N/A",
                     amount,
                     b.getCheckIn().toString(),
-                    "BOOKED",
+                    "PAID",
                     b
                 ));
             }
